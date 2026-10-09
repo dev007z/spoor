@@ -1,0 +1,57 @@
+# Full stack:      docker compose up --build
+# Local dev only:  docker compose up -d db redis   (then run Django with uv on the host)
+
+x-app: &app
+  build: .
+  env_file: .env
+  # Containers talk over the compose network on the services' internal ports,
+  # whatever host ports are published below.
+  environment:
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+    CELERY_BROKER_URL: redis://redis:6379/0
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    <<: *app
+    command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:8000"
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *app
+    command: celery -A config worker --loglevel=info
+
+volumes:
+  pgdata:
