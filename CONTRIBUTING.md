@@ -16,7 +16,7 @@ The hooks run ruff (lint and format) and gitleaks (secret scanning) on every com
 
 - Keep each pull request to one concern.
 - Add or update tests for behaviour you change. Chain adapters are tested against recorded fixtures, never live APIs.
-- If you change how tracing or a heuristic works, update [docs/methodology.md](docs/methodology.md) in the same pull request.
+- If you change how tracing or a heuristic works, explain the change and its reasoning in the pull request description.
 - Never commit API keys, `.env` files, or fixtures that contain keys. Fixture recording strips keys automatically; check the diff anyway.
 
 ## Sign-off (DCO)

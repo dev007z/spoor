@@ -4,13 +4,13 @@ Trace the money, and explain the contract that stole it.
 
 Spoor is an open-source tool for on-chain investigations. Paste an address, a transaction hash, or a token contract and get a hop-by-hop fund-flow graph, a risk breakdown of any token contract involved, and an exportable report where every claim is tied to a transaction hash, block, timestamp, and data source.
 
-> **Status:** early development. See [docs/sprint.md](docs/sprint.md) for the plan.
+> **Status:** early development.
 
 ## Principles
 
 - **Read-only.** Spoor never signs or sends transactions and never holds private keys.
 - **Public data only.** Labels come from public sources, each with a citation.
-- **Reproducible.** Every finding can be re-derived from the cited transactions. How tracing and heuristics work is documented in [docs/methodology.md](docs/methodology.md).
+- **Reproducible.** Every finding can be re-derived from the cited transactions.
 
 ## Quickstart (Docker)
 
