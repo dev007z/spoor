@@ -18,6 +18,7 @@ from spoor.modules.chains.models import Transfer
 from spoor.modules.labels.enums import TERMINAL_CATEGORIES
 from spoor.modules.labels.models import Label
 from spoor.modules.tracing.enums import StopReason, TraceDirection
+from spoor.modules.tracing.heuristics import evaluate_run
 from spoor.modules.tracing.models import TraceEdge, TraceNode
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ class TraceEngine:
                 self.trace()
             else:
                 self.continue_from(from_node)
+            evaluate_run(self.run)
         except AdapterError as exc:
             self.run.mark_finished(error=str(exc))
         except Exception:

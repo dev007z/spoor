@@ -68,6 +68,11 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Heuristics evaluated on every finished trace (see spoor.modules.tracing.heuristics).
+SPOOR_HEURISTICS = [
+    "spoor.modules.tracing.heuristics.CollectionWallet",
+]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
