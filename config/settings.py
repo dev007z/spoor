@@ -66,6 +66,14 @@ SPOOR_CHAIN_ADAPTERS = {
         "class": "spoor.modules.chains.adapters.tron.TronGridAdapter",
         "options": {"api_key": os.getenv("TRONGRID_API_KEY", "")},
     },
+    "bsc": {
+        "class": "spoor.modules.chains.adapters.evm.JsonRpcAdapter",
+        "options": {"rpc_url": os.getenv("BSC_RPC_URL", "")},
+    },
+    "ethereum": {
+        "class": "spoor.modules.chains.adapters.evm.JsonRpcAdapter",
+        "options": {"rpc_url": os.getenv("ETHEREUM_RPC_URL", "")},
+    },
 }
 
 if env_bool("HTTPS"):
