@@ -22,6 +22,20 @@ TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523
 DEFAULT_MAX_BLOCK_RANGE = 1000
 BLOCK_TIME_SAMPLE = 1000  # blocks back from the head used to estimate the block time
 
+# Spoor is read-only: only these methods may ever be sent. Anything that could sign,
+# send, or change node state is refused before a request is made.
+READ_METHODS = frozenset(
+    {
+        "eth_blockNumber",
+        "eth_getBlockByNumber",
+        "eth_getLogs",
+        "eth_getTransactionByHash",
+        "eth_call",
+        "eth_getCode",
+        "eth_getStorageAt",
+    }
+)
+
 # Phrases RPC providers use when an eth_getLogs range or result set is too big.
 RANGE_ERROR_HINTS = ("range", "limit", "too many", "too large", "exceed", "query returned more")
 
@@ -31,6 +45,10 @@ class RpcError(ProviderError):
 
 
 class RangeTooLargeError(RpcError):
+    pass
+
+
+class ForbiddenMethodError(RpcError):
     pass
 
 
@@ -77,6 +95,8 @@ class JsonRpcAdapter(ChainAdapter):
         self.block_times = {}  # per-adapter memo; the block search revisits the same blocks
 
     def call(self, method, params, cacheable):
+        if method not in READ_METHODS:
+            raise ForbiddenMethodError(f"{method} is not a read-only method; Spoor never sends it.")
         payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
         data, raw = self.client.post_json(
             self.rpc_url, payload, cacheable=cacheable, check=check_rpc
@@ -171,6 +191,13 @@ class JsonRpcAdapter(ChainAdapter):
             amount=int(log["data"], 16),
             raw_response=raw,
         )
+
+    def read_contract(self, contract, data):
+        """eth_call at the latest block: the contract's current answer to a view call."""
+        result, raw = self.call(
+            "eth_call", [{"to": contract, "data": data}, "latest"], cacheable=False
+        )
+        return result, raw
 
     def finalized_block_number(self):
         block, _ = self.call("eth_getBlockByNumber", ["finalized", False], cacheable=False)
