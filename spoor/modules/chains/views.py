@@ -7,14 +7,9 @@ from django.views import View
 from django.views.generic import DetailView
 
 from spoor.common.functions import to_units
-from spoor.modules.chains.adapters.base import AdapterError
-from spoor.modules.chains.adapters.registry import get_adapter
 from spoor.modules.chains.forms import AddressTransfersForm
 from spoor.modules.chains.models import Address, RawResponse, Transfer
-
-# Fetches run inside the request until tracing moves them to background workers,
-# so one fetch is capped to keep the page responsive on rate-limited providers.
-MAX_RECORDS_PER_FETCH = 200
+from spoor.modules.chains.services import fetch_address_transfers
 
 
 class AddressTransfersView(View):
@@ -34,7 +29,10 @@ class AddressTransfersView(View):
         form = AddressTransfersForm(request.POST)
         context = {"form": form}
         if form.is_valid():
-            context.update(self.fetch(form.cleaned_data))
+            data = form.cleaned_data
+            context.update(
+                fetch_address_transfers(data["token"], data["address"], data["start"], data["end"])
+            )
             context.update(self.results_context(form.cleaned_data))
 
         if not request.headers.get("HX-Request"):
@@ -45,17 +43,6 @@ class AddressTransfersView(View):
             query = urlencode({k: request.POST[k] for k in ("token", "address", "start", "end")})
             response["HX-Push-Url"] = f"{reverse('chains:address_transfers')}?{query}"
         return response
-
-    def fetch(self, data):
-        token = data["token"]
-        try:
-            result = get_adapter(token.chain).get_token_transfers(
-                data["address"], token, data["start"], data["end"], MAX_RECORDS_PER_FETCH
-            )
-        except AdapterError as exc:
-            return {"fetch_error": str(exc)}
-        Transfer.store_records(token.chain, token, result.records)
-        return {"fetched": len(result.records), "fetch_complete": result.complete}
 
     def results_context(self, data):
         token, chain = data["token"], data["token"].chain

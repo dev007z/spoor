@@ -293,7 +293,7 @@ class TestAddressTransfersPage:
                 return FetchResult(records=[], complete=True)
 
         monkeypatch.setattr(
-            "spoor.modules.chains.views.get_adapter", lambda chain: NoNewTransfers()
+            "spoor.modules.chains.services.get_adapter", lambda chain: NoNewTransfers()
         )
 
         response = admin_client.post(self.URL, self.query(stored["token"]), HTTP_HX_REQUEST="true")
