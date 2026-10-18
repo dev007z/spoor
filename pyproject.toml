@@ -1,6 +1,6 @@
 [project]
 name = "spoor"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Open-source on-chain fund tracing and token contract analysis."
 readme = "README.md"
 license = "Apache-2.0"
