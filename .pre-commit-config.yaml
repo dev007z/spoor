@@ -1,3 +1,6 @@
+# Vendored third-party files stay byte-identical to their upstream release.
+exclude: ^spoor/static/spoor/vendor/
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
