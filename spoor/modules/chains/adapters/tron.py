@@ -75,9 +75,7 @@ class TronGridAdapter(ChainAdapter):
         counts = Counter()
         listed = 0
         while True:
-            page, _ = self.client.get_json(url, params, cacheable=cacheable)
-            if not page.get("success"):
-                raise ProviderError(f"TronGrid listing failed for {address}: {page}")
+            page, _ = self.client.get_json(url, params, cacheable=cacheable, check=check_success)
 
             for item in page["data"]:
                 if item.get("type") != "Transfer":
@@ -95,9 +93,9 @@ class TronGridAdapter(ChainAdapter):
     def transfers_in_transaction(self, tx_hash, address, token):
         url = f"{self.base_url}/v1/transactions/{tx_hash}/events"
         # Events of a confirmed transaction never change, so they are always cacheable.
-        page, raw = self.client.get_json(url, {"only_confirmed": "true"}, cacheable=True)
-        if not page.get("success"):
-            raise ProviderError(f"TronGrid events failed for {tx_hash}: {page}")
+        page, raw = self.client.get_json(
+            url, {"only_confirmed": "true"}, cacheable=True, check=check_success
+        )
 
         records = []
         for event in page["data"]:
@@ -125,6 +123,11 @@ class TronGridAdapter(ChainAdapter):
                 )
             )
         return records
+
+
+def check_success(page):
+    if not page.get("success"):
+        raise ProviderError(f"TronGrid reported failure: {str(page)[:300]}")
 
 
 def to_millis(moment):

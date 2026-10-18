@@ -50,17 +50,31 @@ class ProviderClient:
         self.last_request_at = 0.0
         self.http = httpx.Client(headers=headers or {}, timeout=timeout, transport=transport)
 
-    def get_json(self, url, params=None, *, cacheable):
+    def get_json(self, url, params=None, *, cacheable, check=None):
         params = params or {}
-        return self.request("GET", url, params=params, stored_params=params, cacheable=cacheable)
-
-    def post_json(self, url, payload, *, cacheable):
         return self.request(
-            "POST", url, json_body=payload, stored_params={"body": payload}, cacheable=cacheable
+            "GET", url, params=params, stored_params=params, cacheable=cacheable, check=check
         )
 
-    def request(self, method, url, *, stored_params, cacheable, params=None, json_body=None):
-        """Return (parsed JSON, RawResponse)."""
+    def post_json(self, url, payload, *, cacheable, check=None):
+        return self.request(
+            "POST",
+            url,
+            json_body=payload,
+            stored_params={"body": payload},
+            cacheable=cacheable,
+            check=check,
+        )
+
+    def request(
+        self, method, url, *, stored_params, cacheable, check=None, params=None, json_body=None
+    ):
+        """Return (parsed JSON, RawResponse).
+
+        `check(data)` raises ProviderError when a 200 response still reports a failure
+        (TronGrid's success flag, a JSON-RPC error object). It runs before the response
+        is stored, so a failure is never cached as evidence.
+        """
         endpoint = public_endpoint(url, self.redact_path)
         lookup = {"source": self.source, "endpoint": endpoint, "params": stored_params}
 
@@ -75,6 +89,8 @@ class ProviderClient:
             data = json.loads(response.text)
         except json.JSONDecodeError as exc:
             raise ProviderError(f"{self.source} returned non-JSON from {endpoint}") from exc
+        if check:
+            check(data)
         raw = RawResponse.record(**lookup, status_code=response.status_code, body=response.text)
         return data, raw
 
