@@ -49,7 +49,11 @@ class TronGridAdapter(ChainAdapter):
 
         records = []
         for tx_hash, expected_count in listed.items():
-            found = self.transfers_in_transaction(tx_hash, address, token)
+            found = [
+                r
+                for r in self.transfers_in_transaction(tx_hash, token)
+                if address in (r.from_address, r.to_address)
+            ]
             if len(found) != expected_count:
                 raise ProviderDataError(
                     f"TronGrid lists {expected_count} {token.symbol} transfers for {address} in "
@@ -90,7 +94,10 @@ class TronGridAdapter(ChainAdapter):
                 return dict(counts), True
             params = {**params, "fingerprint": cursor}
 
-    def transfers_in_transaction(self, tx_hash, address, token):
+    def get_transaction_transfers(self, tx_hash, token):
+        return self.transfers_in_transaction(self.chain.normalize_tx_hash(tx_hash), token)
+
+    def transfers_in_transaction(self, tx_hash, token):
         url = f"{self.base_url}/v1/transactions/{tx_hash}/events"
         # Events of a confirmed transaction never change, so they are always cacheable.
         page, raw = self.client.get_json(
@@ -105,19 +112,14 @@ class TronGridAdapter(ChainAdapter):
                 continue
 
             result = event["result"]
-            from_address = self.chain.normalize_address(result["from"])
-            to_address = self.chain.normalize_address(result["to"])
-            if address not in (from_address, to_address):
-                continue
-
             records.append(
                 TransferRecord(
                     tx_hash=tx_hash,
                     log_index=event["event_index"],
                     block_number=event["block_number"],
                     timestamp=from_millis(event["block_timestamp"]),
-                    from_address=from_address,
-                    to_address=to_address,
+                    from_address=self.chain.normalize_address(result["from"]),
+                    to_address=self.chain.normalize_address(result["to"]),
                     amount=int(result["value"]),
                     raw_response=raw,
                 )

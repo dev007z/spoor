@@ -78,6 +78,17 @@ class TestTronGridAdapterOnRecordedData:
         assert transport.requests_served == served_after_first
         assert second.records == first.records
 
+    def test_transaction_transfers_come_from_the_events_endpoint(self, tron, usdt):
+        adapter = tron_adapter(tron, ReplayTransport("tron_usdt_one_hour"))
+
+        records = adapter.get_transaction_transfers(
+            "0x3D93268A87EE31F9C57B1BF6D513ABD2833E64DCA4670BF61FCC92AF8DB46BC6", usdt
+        )
+
+        assert len(records) == 1
+        assert records[0].to_address == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+        assert records[0].amount == 1_000_000
+
     def test_records_store_once_and_keep_their_original_evidence(self, tron, usdt):
         result = self.fetch(tron, usdt, ReplayTransport("tron_usdt_one_hour"))
 
@@ -258,6 +269,17 @@ class TestProviderClient:
             self.client(handler).get_json(self.URL, cacheable=False)
         assert len(calls) == 1
 
+    def test_refusals_carry_the_providers_reason(self):
+        refusal = {
+            "jsonrpc": "2.0",
+            "error": {"code": -32602, "message": "Archive requests need a key"},
+        }
+
+        with pytest.raises(ProviderError, match="HTTP 403 .*: Archive requests need a key"):
+            self.client(lambda r: httpx.Response(403, json=refusal)).get_json(
+                self.URL, cacheable=False
+            )
+
     def test_failed_responses_are_not_stored_as_evidence(self):
         with pytest.raises(ProviderError):
             self.client(lambda r: httpx.Response(404)).get_json(self.URL, cacheable=False)
@@ -382,6 +404,7 @@ class FakeChain:
     def __init__(self, times, logs=(), max_range=None, finalized=None):
         self.times = times
         self.logs = list(logs)
+        self.transactions = {}
         self.max_range = max_range
         self.finalized = len(times) - 1 if finalized is None else finalized
         self.ranges = []
@@ -395,6 +418,8 @@ class FakeChain:
             tag = params[0]
             number = self.finalized if tag == "finalized" else int(tag, 16)
             return self.ok({"number": hex(number), "timestamp": hex(self.times[number])})
+        if method == "eth_getTransactionByHash":
+            return self.ok(self.transactions.get(params[0]))
         if method == "eth_getLogs":
             spec = params[0]
             start, end = int(spec["fromBlock"], 16), int(spec["toBlock"], 16)
@@ -526,6 +551,29 @@ class TestJsonRpcAdapterBehaviour:
 
         refetched = node.ranges[first:]
         assert refetched and all(end > 100 for _, end in refetched)
+
+    def test_transaction_transfers_are_that_transactions_logs_in_its_block(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES,
+            [
+                transfer_log(42, 3, self.OTHER, self.SUBJECT, 9, tx="ab"),
+                transfer_log(42, 4, self.SUBJECT, self.OTHER, 5, tx="cd"),  # same block, other tx
+            ],
+        )
+        node.transactions["0x" + "ab" * 32] = {"blockNumber": hex(42)}
+        adapter = rpc_adapter(bsc, httpx.MockTransport(node))
+
+        records = adapter.get_transaction_transfers("0x" + "AB" * 32, bsc_usdt)
+
+        assert [(r.log_index, r.amount) for r in records] == [(3, 9)]
+        assert records[0].timestamp == self.at(42)
+        assert node.ranges == [(42, 42)]
+
+    def test_unknown_transaction_is_an_error(self, bsc, bsc_usdt):
+        adapter = rpc_adapter(bsc, httpx.MockTransport(FakeChain(self.TIMES)))
+
+        with pytest.raises(ProviderError, match="not found"):
+            adapter.get_transaction_transfers("0x" + "ef" * 32, bsc_usdt)
 
     def test_missing_rpc_url_explains_the_setting(self, bsc):
         with pytest.raises(AdapterError, match="BSC_RPC_URL"):
