@@ -215,3 +215,60 @@ class TestFailures:
         run.refresh_from_db()
         assert run.status == TraceStatus.FAILED
         assert "No adapter configured" in run.error
+
+
+@pytest.mark.django_db
+class TestTracePages:
+    def form_data(self, usdt, **overrides):
+        return {
+            "token": usdt.pk,
+            "address": addr("a"),
+            "start": "2026-01-01T00:00",
+            "end": "2026-01-02T00:00",
+            "direction": TraceDirection.FORWARD,
+            "max_hops": 2,
+            "fan_out": 3,
+            "min_amount": "1.5",
+            **overrides,
+        }
+
+    def test_requires_login(self, client):
+        assert client.get("/traces/").status_code == 302
+
+    def test_starting_a_trace_queues_it_after_commit(
+        self, admin_client, usdt, monkeypatch, django_capture_on_commit_callbacks
+    ):
+        queued = []
+        monkeypatch.setattr("spoor.modules.tracing.views.run_trace.delay", queued.append)
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = admin_client.post("/traces/", self.form_data(usdt))
+
+        run = TraceRun.objects.get()
+        assert response.url == f"/traces/{run.pk}/"
+        assert queued == [str(run.pk)]
+        assert run.min_amount == 1_500_000_000_000_000_000  # 1.5 USDT at 18 decimals
+        assert [seed.address for seed in run.seeds.all()] == [addr("a")]
+
+    def test_min_amount_finer_than_the_token_allows_is_rejected(self, admin_client):
+        tron_usdt = Token.objects.get(chain__key="tron", symbol="USDT")
+        data = self.form_data(
+            tron_usdt, address="TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", min_amount="0.0000001"
+        )
+
+        response = admin_client.post("/traces/", data)
+
+        assert "min_amount" in response.context["form"].errors
+        assert not TraceRun.objects.exists()
+
+    def test_running_trace_keeps_polling_and_finished_trace_stops(self, admin_client, usdt):
+        run = make_run(usdt)
+        url = f"/traces/{run.pk}/"
+
+        polling = admin_client.get(url, HTTP_HX_REQUEST="true").content.decode()
+        TraceEngine(run, GraphAdapter([("a", "b", 100, 1)])).execute()
+        finished = admin_client.get(url, HTTP_HX_REQUEST="true")
+
+        assert 'hx-trigger="every 2s"' in polling
+        assert "hx-trigger" not in finished.content.decode()
+        assert finished.context["stats"] == {"addresses": 2, "transfers": 1, "endpoints": 0}
