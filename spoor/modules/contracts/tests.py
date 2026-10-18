@@ -85,7 +85,10 @@ class TestFetchContract:
 
 @pytest.mark.django_db
 class TestContractPages:
-    def test_detail_lists_state_changing_functions_first(self, admin_client):
+    def test_detail_lists_state_changing_functions_first(self, admin_client, monkeypatch):
+        monkeypatch.setattr(
+            "spoor.modules.contracts.analysis.read_ownership", lambda *args, **kwargs: None
+        )
         contract = fetch_contract(Chain.get_chain(key="bsc"), BSC_USDT, recorded_client())
 
         response = admin_client.get(f"/contracts/{contract.pk}/")
