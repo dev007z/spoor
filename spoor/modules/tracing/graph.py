@@ -32,6 +32,7 @@ def build_graph(run):
         nodes.append(
             {
                 "id": address,
+                "node_id": str(node.pk),
                 "hop": node.hop,
                 "kind": node_kind(node, seed_ids),
                 "label": node.label.entity if node.label else None,
@@ -40,6 +41,8 @@ def build_graph(run):
                 or ("Expanded" if node.expanded else "Queued"),
                 "fan_out_truncated": node.fan_out_truncated,
                 "fetch_incomplete": node.fetch_incomplete,
+                "expandable": run.is_finished and not node.expanded,
+                "expand_url": reverse("tracing:expand_node", args=[run.pk, node.pk]),
                 "explorer_url": chain.address_url(address),
                 "transfers_url": f"{transfers_url}?{urlencode({**window, 'address': address})}",
             }
