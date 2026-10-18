@@ -6,7 +6,8 @@ import pytest
 from django.test import override_settings
 from django.utils import timezone
 
-from spoor.modules.chains.adapters.base import ProviderDataError, ProviderError
+from spoor.modules.chains.adapters.base import AdapterError, ProviderDataError, ProviderError
+from spoor.modules.chains.adapters.evm import TRANSFER_TOPIC, JsonRpcAdapter
 from spoor.modules.chains.adapters.http import ProviderClient, public_endpoint
 from spoor.modules.chains.adapters.registry import AdapterNotConfiguredError, get_adapter
 from spoor.modules.chains.adapters.replay import ReplayTransport
@@ -306,3 +307,249 @@ class TestRegistry:
         assert isinstance(adapter, TronGridAdapter)
         assert adapter.base_url == "https://trongrid.example"
         assert adapter.client.min_interval == 0
+
+
+# Recorded with: record_adapter_fixture bsc 0x59cc9ef29ecefaea870eb6f3a7b75887fe25110b
+#   --start 2026-10-18T00:31:00+00:00 --end 2026-10-18T01:01:00+00:00 --name bsc_usdt_half_hour
+BSC_ADDRESS = "0x59cc9ef29ecefaea870eb6f3a7b75887fe25110b"
+BSC_START = datetime(2026, 10, 18, 0, 31, tzinfo=UTC)
+BSC_END = datetime(2026, 10, 18, 1, 1, tzinfo=UTC)
+RPC_URL = "https://rpc.example/secret-key-in-path"
+
+
+@pytest.fixture
+def bsc():
+    return Chain.get_chain(key="bsc")
+
+
+@pytest.fixture
+def bsc_usdt(bsc):
+    return Token.objects.get(chain=bsc, symbol="USDT")
+
+
+def rpc_adapter(chain, transport, **options):
+    return JsonRpcAdapter(chain, transport=transport, rpc_url=RPC_URL, min_interval=0, **options)
+
+
+@pytest.mark.django_db
+class TestJsonRpcAdapterOnRecordedData:
+    def fetch(self, bsc, usdt, transport):
+        return rpc_adapter(bsc, transport).get_token_transfers(
+            BSC_ADDRESS, usdt, BSC_START, BSC_END, max_records=500
+        )
+
+    def replay(self):
+        return ReplayTransport("bsc_usdt_half_hour", redact_path=True)
+
+    def test_returns_transfers_in_the_window_with_evidence_fields(self, bsc, bsc_usdt):
+        result = self.fetch(bsc, bsc_usdt, self.replay())
+
+        assert result.complete
+        assert len(result.records) == 6
+        for record in result.records:
+            assert BSC_ADDRESS in (record.from_address, record.to_address)
+            assert BSC_START <= record.timestamp <= BSC_END
+            assert record.tx_hash.startswith("0x") and record.tx_hash == record.tx_hash.lower()
+
+    def test_rpc_url_path_is_never_stored(self, bsc, bsc_usdt):
+        result = self.fetch(bsc, bsc_usdt, self.replay())
+
+        assert result.records[0].raw_response.endpoint == "https://rpc.example/"
+        assert not RawResponse.objects.filter(endpoint__contains="secret").exists()
+
+    def test_second_fetch_only_asks_about_the_unfinalized_head(self, bsc, bsc_usdt):
+        """Finalized blocks and logs come from cache; head number, finality, head block are live."""
+        transport = self.replay()
+        self.fetch(bsc, bsc_usdt, transport)
+        served = transport.requests_served
+
+        self.fetch(bsc, bsc_usdt, transport)
+
+        assert transport.requests_served == served + 3
+
+
+def word(value):
+    return "0x" + format(value, "064x")
+
+
+def topic_for(address):
+    return "0x" + address[2:].rjust(64, "0")
+
+
+class FakeChain:
+    """A scripted JSON-RPC node: block i has timestamp times[i]; logs are filtered like a node."""
+
+    def __init__(self, times, logs=(), max_range=None, finalized=None):
+        self.times = times
+        self.logs = list(logs)
+        self.max_range = max_range
+        self.finalized = len(times) - 1 if finalized is None else finalized
+        self.ranges = []
+
+    def __call__(self, request):
+        body = json.loads(request.content)
+        method, params = body["method"], body["params"]
+        if method == "eth_blockNumber":
+            return self.ok(hex(len(self.times) - 1))
+        if method == "eth_getBlockByNumber":
+            tag = params[0]
+            number = self.finalized if tag == "finalized" else int(tag, 16)
+            return self.ok({"number": hex(number), "timestamp": hex(self.times[number])})
+        if method == "eth_getLogs":
+            spec = params[0]
+            start, end = int(spec["fromBlock"], 16), int(spec["toBlock"], 16)
+            if self.max_range and end - start + 1 > self.max_range:
+                return httpx.Response(
+                    200,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "error": {"code": -32005, "message": "block range limit exceeded"},
+                    },
+                )
+            self.ranges.append((start, end))
+            return self.ok([log for log in self.logs if self.matches(log, start, end, spec)])
+        raise AssertionError(method)
+
+    @staticmethod
+    def matches(log, start, end, spec):
+        if not start <= int(log["blockNumber"], 16) <= end:
+            return False
+        return all(
+            want is None or log["topics"][i] == want for i, want in enumerate(spec["topics"])
+        )
+
+    @staticmethod
+    def ok(result):
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+
+def transfer_log(block, index, sender, receiver, amount, tx="ab", removed=False):
+    return {
+        "blockNumber": hex(block),
+        "logIndex": hex(index),
+        "transactionHash": "0x" + tx * 32,
+        "topics": [TRANSFER_TOPIC, topic_for(sender), topic_for(receiver)],
+        "data": word(amount),
+        "removed": removed,
+    }
+
+
+@pytest.mark.django_db
+class TestJsonRpcAdapterBehaviour:
+    SUBJECT = "0x" + "aa" * 20
+    OTHER = "0x" + "bb" * 20
+    TIMES = [1_000_000 + 3 * i for i in range(500)]  # block i at 1_000_000 + 3i seconds
+
+    def at(self, block):
+        return datetime.fromtimestamp(self.TIMES[block], tz=UTC)
+
+    def fetch(self, bsc, usdt, node, start=10, end=400, max_records=500, **options):
+        adapter = rpc_adapter(bsc, httpx.MockTransport(node), **options)
+        return adapter.get_token_transfers(
+            self.SUBJECT, usdt, self.at(start), self.at(end), max_records
+        )
+
+    def test_reads_both_directions_in_block_order(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES,
+            [
+                transfer_log(200, 1, self.SUBJECT, self.OTHER, 5, tx="02"),
+                transfer_log(100, 0, self.OTHER, self.SUBJECT, 7, tx="01"),
+            ],
+        )
+
+        records = self.fetch(bsc, bsc_usdt, node).records
+
+        assert [(r.block_number, r.amount) for r in records] == [(100, 7), (200, 5)]
+        assert records[0].to_address == self.SUBJECT
+        assert records[0].timestamp == self.at(100)
+
+    def test_window_bounds_are_inclusive_to_the_block(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES,
+            [
+                transfer_log(9, 0, self.OTHER, self.SUBJECT, 1, tx="01"),
+                transfer_log(10, 0, self.OTHER, self.SUBJECT, 1, tx="02"),
+                transfer_log(400, 0, self.OTHER, self.SUBJECT, 1, tx="03"),
+                transfer_log(401, 0, self.OTHER, self.SUBJECT, 1, tx="04"),
+            ],
+        )
+
+        records = self.fetch(bsc, bsc_usdt, node).records
+
+        assert [r.block_number for r in records] == [10, 400]
+
+    def test_refused_ranges_are_split_until_the_node_accepts(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES, [transfer_log(150, 0, self.OTHER, self.SUBJECT, 1)], max_range=100
+        )
+
+        result = self.fetch(bsc, bsc_usdt, node, max_block_range=1000)
+
+        assert len(result.records) == 1
+        assert all(end - start + 1 <= 100 for start, end in node.ranges)
+        assert RawResponse.objects.filter(body__contains="limit exceeded").count() == 0
+
+    def test_self_transfer_is_counted_once(self, bsc, bsc_usdt):
+        node = FakeChain(self.TIMES, [transfer_log(50, 0, self.SUBJECT, self.SUBJECT, 1)])
+
+        assert len(self.fetch(bsc, bsc_usdt, node).records) == 1
+
+    def test_reorged_logs_are_ignored(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES,
+            [
+                transfer_log(50, 0, self.OTHER, self.SUBJECT, 1, removed=True),
+            ],
+        )
+
+        assert self.fetch(bsc, bsc_usdt, node).records == []
+
+    def test_max_records_truncates_and_reports_incomplete(self, bsc, bsc_usdt):
+        node = FakeChain(
+            self.TIMES,
+            [transfer_log(20 + i, 0, self.OTHER, self.SUBJECT, 1, tx=f"{i:02x}") for i in range(5)],
+        )
+
+        result = self.fetch(bsc, bsc_usdt, node, max_records=3)
+
+        assert len(result.records) == 3
+        assert not result.complete
+
+    def test_unfinalized_ranges_are_never_served_from_cache(self, bsc, bsc_usdt):
+        node = FakeChain(self.TIMES, finalized=100)
+
+        self.fetch(bsc, bsc_usdt, node)
+        first = len(node.ranges)
+        self.fetch(bsc, bsc_usdt, node)
+
+        refetched = node.ranges[first:]
+        assert refetched and all(end > 100 for _, end in refetched)
+
+    def test_missing_rpc_url_explains_the_setting(self, bsc):
+        with pytest.raises(AdapterError, match="BSC_RPC_URL"):
+            JsonRpcAdapter(bsc, rpc_url="")
+
+
+@pytest.mark.django_db
+class TestBlockSearch:
+    @pytest.mark.parametrize(
+        "times",
+        [
+            [1_000 + 3 * i for i in range(2_000)],  # uniform
+            [1_000 + 3 * i + (40 if i > 1_500 else 0) for i in range(2_000)],  # a halt
+            [1_000 + (i // 4) for i in range(2_000)],  # several blocks per second
+        ],
+    )
+    def test_matches_brute_force(self, bsc, times):
+        adapter = rpc_adapter(bsc, httpx.MockTransport(FakeChain(times)))
+        adapter.head, adapter.finalized = len(times) - 1, len(times) - 1
+
+        for target in [times[0] - 5, times[0], 1_777, times[1_700] - 1, times[-1], times[-1] + 9]:
+            moment = datetime.fromtimestamp(target, tz=UTC)
+            expected_inclusive = next((i for i, t in enumerate(times) if t >= target), len(times))
+            expected_exclusive = next((i for i, t in enumerate(times) if t > target), len(times))
+
+            assert adapter.first_block_at_or_after(moment) == expected_inclusive
+            assert adapter.first_block_at_or_after(moment, inclusive=False) == expected_exclusive

@@ -15,7 +15,7 @@
       <button type="submit" class="primary">Fetch from chain</button>
     </div>
   </div>
-  <p id="fetching" class="htmx-indicator lede">Fetching from the provider. Keyless TronGrid allows about one request per second, so this can take a while.</p>
+  <p id="fetching" class="htmx-indicator lede">Fetching from the provider. Free provider tiers are rate limited, so a long window can take a while.</p>
 </form>
 
 {% if fetch_error %}
@@ -27,8 +27,8 @@
 {% if rows is not None %}
   <section class="stats">
     <div class="stat"><div class="label">Transfers</div><div class="value">{{ stats.count }}</div></div>
-    <div class="stat"><div class="label">Received</div><div class="value dir-in">{{ stats.total_in|units }} {{ token.symbol }}</div></div>
-    <div class="stat"><div class="label">Sent</div><div class="value dir-out">{{ stats.total_out|units }} {{ token.symbol }}</div></div>
+    <div class="stat"><div class="label">Received</div><div class="value dir-in" title="{{ stats.total_in|units }}">{{ stats.total_in|amount }} {{ token.symbol }}</div></div>
+    <div class="stat"><div class="label">Sent</div><div class="value dir-out" title="{{ stats.total_out|units }}">{{ stats.total_out|amount }} {{ token.symbol }}</div></div>
     <div class="stat"><div class="label">Counterparties</div><div class="value">{{ stats.counterparties }}</div></div>
   </section>
 
@@ -53,7 +53,7 @@
             <td class="mono" title="{{ row.counterparty }}">
               <a href="{{ row.counterparty_url }}" target="_blank" rel="noopener noreferrer">{{ row.counterparty|short }}</a>
             </td>
-            <td class="num">{{ row.transfer.amount_units|units }} {{ token.symbol }}</td>
+            <td class="num" title="{{ row.transfer.amount_units|units }}">{{ row.transfer.amount_units|amount }} {{ token.symbol }}</td>
             <td class="mono" title="{{ row.transfer.tx_hash }}">
               <a href="{{ row.tx_url }}" target="_blank" rel="noopener noreferrer">{{ row.transfer.tx_hash|short }}</a>
               <span class="lede">#{{ row.transfer.log_index }}</span>
