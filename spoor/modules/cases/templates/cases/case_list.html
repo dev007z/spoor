@@ -1,0 +1,43 @@
+{% extends "spoor/base.html" %}
+
+{% block title %}Cases | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Cases</h1>
+  <p class="lede">Group the traces and notes of one investigation, with a record of who did what.</p>
+
+  <form class="panel" method="post" action="{% url 'cases:case_list' %}">
+    {% csrf_token %}
+    <div class="form-grid wide">
+      {% for field in form %}
+        <div class="field{% if field.name == 'description' %} span-2{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="field">
+        <button type="submit" class="primary">Open case</button>
+      </div>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>Case</th><th>Type</th><th class="num">Traces</th><th>Opened by</th><th>Opened</th></tr></thead>
+      <tbody>
+        {% for case in cases %}
+          <tr>
+            <td><a href="{% url 'cases:case_detail' case.pk %}">{{ case.name }}</a></td>
+            <td>{{ case.get_case_type_display }}</td>
+            <td class="num">{{ case.trace_count }}</td>
+            <td>{{ case.created_by.get_username }}</td>
+            <td>{{ case.created_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No cases yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

@@ -98,7 +98,7 @@ h1 { font-size: 22px; margin: 0 0 4px; }
   align-items: end;
 }
 .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
-.field input, .field select {
+.field input, .field select, .field textarea {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -181,3 +181,13 @@ h2 { font-size: 16px; margin: 0 0 10px; }
   #trace-graph { height: 380px; }
 }
 .legend span.note::before { display: none; }
+
+a.button { display: inline-block; text-decoration: none; }
+a.button.primary { background: var(--accent); border: 1px solid var(--accent); color: var(--accent-text); font-weight: 600; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.section-head h2 { margin: 0; }
+.case-summary { margin: 0; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.timeline li:last-child { border-bottom: 0; }
+.timeline time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
