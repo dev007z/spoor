@@ -111,6 +111,24 @@ class JsonRpcAdapter(ChainAdapter):
         records.sort(key=lambda r: (r.block_number, r.log_index))
         return FetchResult(records=records, complete=complete)
 
+    def get_transaction_transfers(self, tx_hash, token):
+        """The token's Transfer logs from one transaction.
+
+        Reads the transaction's block with eth_getLogs rather than the receipt: some
+        nodes refuse receipts, and it keeps every EVM transfer's evidence in one shape.
+        """
+        tx_hash = self.chain.normalize_tx_hash(tx_hash)
+        self.finalized = self.finalized_block_number()
+        transaction, _ = self.call("eth_getTransactionByHash", [tx_hash], cacheable=False)
+        if transaction is None or transaction.get("blockNumber") is None:
+            raise RpcError(f"Transaction {tx_hash} not found in a block on {self.chain.name}")
+        block = int(transaction["blockNumber"], 16)
+        return [
+            self.to_record(log, raw)
+            for log, raw in self.get_logs(token.contract, [TRANSFER_TOPIC], block, block)
+            if log["transactionHash"].lower() == tx_hash
+        ]
+
     def get_logs(self, contract, topics, from_block, to_block):
         """Yield (log, raw_response), shrinking the block range when the node refuses it."""
         size = self.max_block_range

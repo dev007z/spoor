@@ -50,8 +50,46 @@ class TraceEngine:
             self.run.mark_finished()
 
     def trace(self):
+        if self.run.seed_tx_hash:
+            self.walk(self.seed_from_transaction())
+            return
         seed_anchor = self.run.start if self.forward else self.run.end
         self.walk([self.add_node(seed, hop=0, anchor=seed_anchor) for seed in self.run.seeds.all()])
+
+    def seed_from_transaction(self):
+        """Use one transaction's transfers as the first hop.
+
+        Forward, its senders are the seeds and its recipients are hop 1; backward, the
+        reverse. Returns the hop-1 nodes to continue from.
+        """
+        run = self.run
+        records = self.adapter.get_transaction_transfers(run.seed_tx_hash, run.token)
+        if not records:
+            raise AdapterError(
+                f"Transaction {run.seed_tx_hash} has no {run.token.symbol} transfers."
+            )
+        Transfer.store_records(run.chain, run.token, records)
+        transfers = (
+            Transfer.objects.filter(chain=run.chain, token=run.token, tx_hash=run.seed_tx_hash)
+            .select_related("from_address", "to_address")
+            .order_by("log_index")
+        )
+
+        for transfer in transfers:
+            origin = transfer.from_address if self.forward else transfer.to_address
+            if origin.id not in self.nodes:
+                seed = self.add_node(origin, hop=0, anchor=transfer.timestamp)
+                seed.expanded = True
+                seed.save(update_fields=["expanded", "updated_at"])
+        run.seeds.set([node.address for node in self.nodes.values()])
+
+        discovered = []
+        for transfer in transfers:
+            TraceEdge.objects.get_or_create(run=run, transfer=transfer, defaults={"hop": 0})
+            onward = transfer.to_address if self.forward else transfer.from_address
+            if onward.id not in self.nodes:
+                discovered.append(self.add_node(onward, hop=1, anchor=transfer.timestamp))
+        return discovered
 
     def continue_from(self, node):
         self.nodes = {n.address_id: n for n in self.run.nodes.select_related("address", "label")}

@@ -28,6 +28,17 @@ def public_endpoint(url, redact_path=False):
     return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
 
 
+def provider_reason(response):
+    """The provider's own explanation of a refusal, when it gives one, kept short."""
+    try:
+        data = response.json()
+    except ValueError:
+        return ""
+    error = data.get("error") if isinstance(data, dict) else None
+    message = error.get("message") if isinstance(error, dict) else error or data.get("message")
+    return f": {str(message)[:200]}" if message else ""
+
+
 class ProviderClient:
     def __init__(
         self,
@@ -109,6 +120,7 @@ class ProviderClient:
                 if response.status_code not in RETRYABLE_STATUSES:
                     raise ProviderError(
                         f"{self.source} returned HTTP {response.status_code} from {endpoint}"
+                        f"{provider_reason(response)}"
                     )
                 failure = f"HTTP {response.status_code}"
                 retry_after = response.headers.get("Retry-After")

@@ -25,7 +25,8 @@ class TraceListView(View):
         data = form.cleaned_data
         run = TraceRun.create_run(
             data["token"],
-            data["address"],
+            seed_address=data["address"],
+            seed_tx_hash=data["seed_tx_hash"],
             direction=data["direction"],
             start=data["start"],
             end=data["end"],
@@ -80,6 +81,7 @@ def trace_context(run):
     return {
         "run": run,
         "seeds": list(run.seeds.all()),
+        "seed_tx_url": chain.tx_url(run.seed_tx_hash) if run.seed_tx_hash else None,
         "min_amount_units": to_units(run.min_amount, token.decimals),
         "node_rows": node_rows,
         "edge_rows": edge_rows,

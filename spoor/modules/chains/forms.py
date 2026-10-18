@@ -31,10 +31,7 @@ class AddressTransfersForm(forms.Form):
         cleaned = super().clean()
         token, address = cleaned.get("token"), cleaned.get("address")
         if token and address:
-            try:
-                cleaned["address"] = token.chain.normalize_address(address)
-            except InvalidAddressError:
-                self.add_error("address", f"Not a valid {token.chain.name} address.")
+            self.clean_target(cleaned, token, address)
 
         start, end = cleaned.get("start"), cleaned.get("end")
         if start and end:
@@ -43,3 +40,9 @@ class AddressTransfersForm(forms.Form):
             elif end - start > MAX_WINDOW:
                 self.add_error("end", "The window can be at most 31 days.")
         return cleaned
+
+    def clean_target(self, cleaned, token, value):
+        try:
+            cleaned["address"] = token.chain.normalize_address(value)
+        except InvalidAddressError:
+            self.add_error("address", f"Not a valid {token.chain.name} address.")

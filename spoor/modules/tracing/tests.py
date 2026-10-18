@@ -59,6 +59,14 @@ class GraphAdapter:
         ]
         return FetchResult(records=matching, complete=address not in self.incomplete)
 
+    def get_transaction_transfers(self, tx_hash, token):
+        return [r for r in self.records if r.tx_hash == tx_hash]
+
+
+def tx(index):
+    """The hash GraphAdapter gives the index-th edge (1-based)."""
+    return "0x" + format(index, "064x")
+
 
 @pytest.fixture
 def usdt():
@@ -184,6 +192,44 @@ class TestForwardTrace:
 
 
 @pytest.mark.django_db
+class TestTransactionSeeds:
+    def test_forward_starts_from_the_transactions_recipients(self, usdt):
+        """Seeded from a→b, the trace follows b onward but not a's other outflows."""
+        edges = [("a", "b", 100, 1), ("a", "x", 500, 1), ("b", "c", 90, 2)]
+        run = TraceRun.create_run(usdt, seed_tx_hash=tx(1), start=at(0), end=at(1000))
+
+        TraceEngine(run, GraphAdapter(edges)).execute()
+
+        run.refresh_from_db()
+        assert run.status == TraceStatus.COMPLETED
+        assert node_hops(run) == {"a": 0, "b": 1, "c": 2}
+        assert [s.address for s in run.seeds.all()] == [addr("a")]
+
+    def test_backward_starts_from_the_transactions_senders(self, usdt):
+        edges = [("z", "a", 100, 1), ("a", "b", 100, 2)]
+        run = TraceRun.create_run(
+            usdt,
+            seed_tx_hash=tx(2),
+            start=at(0),
+            end=at(1000),
+            direction=TraceDirection.BACKWARD,
+        )
+
+        TraceEngine(run, GraphAdapter(edges)).execute()
+
+        assert node_hops(run) == {"b": 0, "a": 1, "z": 2}
+
+    def test_transaction_without_token_transfers_fails_the_run(self, usdt):
+        run = TraceRun.create_run(usdt, seed_tx_hash=tx(99), start=at(0), end=at(1000))
+
+        TraceEngine(run, GraphAdapter([("a", "b", 1, 1)])).execute()
+
+        run.refresh_from_db()
+        assert run.status == TraceStatus.FAILED
+        assert "has no USDT transfers" in run.error
+
+
+@pytest.mark.django_db
 class TestBackwardTrace:
     def test_follows_inflows_that_happened_before(self, usdt):
         """c received from b at 5; b's funds came from a at 3, not from z at 9 (after)."""
@@ -251,6 +297,18 @@ class TestTracePages:
         assert queued == [str(run.pk)]
         assert run.min_amount == 1_500_000_000_000_000_000  # 1.5 USDT at 18 decimals
         assert [seed.address for seed in run.seeds.all()] == [addr("a")]
+
+    def test_a_transaction_hash_seeds_from_that_transaction(
+        self, admin_client, usdt, monkeypatch, django_capture_on_commit_callbacks
+    ):
+        monkeypatch.setattr("spoor.modules.tracing.views.run_trace.delay", lambda run_id: None)
+
+        with django_capture_on_commit_callbacks(execute=True):
+            admin_client.post("/traces/", self.form_data(usdt, address="0x" + "AB" * 32))
+
+        run = TraceRun.objects.get()
+        assert run.seed_tx_hash == "0x" + "ab" * 32
+        assert not run.seeds.exists()
 
     def test_min_amount_finer_than_the_token_allows_is_rejected(self, admin_client):
         tron_usdt = Token.objects.get(chain__key="tron", symbol="USDT")

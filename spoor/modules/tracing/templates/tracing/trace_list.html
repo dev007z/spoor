@@ -38,7 +38,10 @@
           <tr>
             <td><a href="{% url 'tracing:trace_detail' run.pk %}">{{ run.created_at|date:"Y-m-d H:i" }}</a></td>
             <td>{{ run.token.symbol }} on {{ run.token.chain.name }}</td>
-            <td class="mono">{% for seed in run.seeds.all %}<span title="{{ seed.address }}">{{ seed.address|short }}</span>{% endfor %}</td>
+            <td class="mono">
+              {% if run.seed_tx_hash %}<span title="{{ run.seed_tx_hash }}">tx {{ run.seed_tx_hash|short }}</span>
+              {% else %}{% for seed in run.seeds.all %}<span title="{{ seed.address }}">{{ seed.address|short }}</span>{% endfor %}{% endif %}
+            </td>
             <td>{{ run.direction|capfirst }}</td>
             <td>{{ run.start|date:"Y-m-d H:i" }} to {{ run.end|date:"Y-m-d H:i" }}</td>
             <td class="num">{{ run.node_count }}</td>

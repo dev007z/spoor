@@ -56,3 +56,7 @@ class ChainAdapter(ABC):
         Addresses in the records are canonical (see chains.addresses). `start` and
         `end` are timezone-aware datetimes.
         """
+
+    @abstractmethod
+    def get_transaction_transfers(self, tx_hash, token):
+        """Every transfer of `token` emitted by one transaction, in log order."""
