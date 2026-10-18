@@ -2,13 +2,11 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
-from spoor.common.functions import to_units
 from spoor.modules.cases.enums import CaseEventType
 from spoor.modules.cases.models import CaseEvent
-from spoor.modules.screening.exposure import trace_exposure
-from spoor.modules.tracing.enums import StopReason
 from spoor.modules.tracing.forms import StartTraceForm
 from spoor.modules.tracing.models import TraceRun
+from spoor.modules.tracing.summary import summarize_run
 from spoor.modules.tracing.tasks import run_trace
 
 
@@ -64,44 +62,8 @@ class TraceDetailView(View):
     def get(self, request, pk):
         run = get_object_or_404(TraceRun.objects.select_related("token__chain", "case"), pk=pk)
         template = self.body_template_name if request.headers.get("HX-Request") else None
-        return render(request, template or self.template_name, trace_context(run))
-
-
-def trace_context(run):
-    nodes = list(run.fetch_nodes())
-    edges = list(run.fetch_edges())
-    chain, token = run.chain, run.token
-
-    flows = {}
-    for edge in edges:
-        transfer = edge.transfer
-        for address_id, key in ((transfer.from_address_id, "out"), (transfer.to_address_id, "in")):
-            flows.setdefault(address_id, {"in": 0, "out": 0})[key] += transfer.amount
-
-    node_rows = [
-        {
-            "node": node,
-            "url": chain.address_url(node.address.address),
-            "received": to_units(flows.get(node.address_id, {}).get("in", 0), token.decimals),
-            "sent": to_units(flows.get(node.address_id, {}).get("out", 0), token.decimals),
-        }
-        for node in nodes
-    ]
-    edge_rows = [
-        {"edge": edge, "transfer": edge.transfer, "tx_url": chain.tx_url(edge.transfer.tx_hash)}
-        for edge in edges
-    ]
-    return {
-        "run": run,
-        "seeds": list(run.seeds.all()),
-        "seed_tx_url": chain.tx_url(run.seed_tx_hash) if run.seed_tx_hash else None,
-        "min_amount_units": to_units(run.min_amount, token.decimals),
-        "node_rows": node_rows,
-        "edge_rows": edge_rows,
-        "exposure": trace_exposure(run),
-        "stats": {
-            "addresses": len(nodes),
-            "transfers": len(edges),
-            "endpoints": sum(n.stop_reason == StopReason.LABELED_ENDPOINT for n in nodes),
-        },
-    }
+        context = summarize_run(run)
+        context["reports"] = (
+            run.reports.select_related("created_by").defer("html", "pdf").order_by("-created_at")
+        )
+        return render(request, template or self.template_name, context)
