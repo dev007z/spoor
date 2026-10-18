@@ -3,6 +3,19 @@ from django.contrib import admin
 from spoor.modules.chains.models import Address, Chain, RawResponse, Token, Transfer
 
 
+class EvidenceAdmin(admin.ModelAdmin):
+    """Evidence is written only by adapters; the admin may inspect it, never alter it."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Chain)
 class ChainAdmin(admin.ModelAdmin):
     list_display = ("key", "name", "family", "evm_chain_id")
@@ -23,17 +36,20 @@ class AddressAdmin(admin.ModelAdmin):
 
 
 @admin.register(RawResponse)
-class RawResponseAdmin(admin.ModelAdmin):
+class RawResponseAdmin(EvidenceAdmin):
     list_display = ("source", "endpoint", "status_code", "retrieved_at")
     list_filter = ("source", "status_code")
     search_fields = ("endpoint", "fingerprint")
-    readonly_fields = [field.name for field in RawResponse._meta.fields]
 
 
 @admin.register(Transfer)
-class TransferAdmin(admin.ModelAdmin):
-    list_display = ("tx_hash", "log_index", "chain", "token", "from_address", "to_address")
+class TransferAdmin(EvidenceAdmin):
+    list_display = ("timestamp", "chain", "amount_display", "from_address", "to_address", "tx_hash")
     list_filter = ("chain", "token")
-    search_fields = ("tx_hash",)
+    search_fields = ("tx_hash", "from_address__address", "to_address__address")
     list_select_related = ("chain", "token", "from_address", "to_address")
-    raw_id_fields = ("from_address", "to_address", "raw_response")
+    ordering = ("-timestamp",)
+
+    @admin.display(description="Amount", ordering="amount")
+    def amount_display(self, transfer):
+        return f"{transfer.amount_units:,} {transfer.token.symbol}"
