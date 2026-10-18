@@ -37,9 +37,38 @@ class TraceRun(ModelMixin):
     def __str__(self):
         return f"{self.get_direction_display()} trace of {self.token} ({self.status})"
 
+    @classmethod
+    def create_run(cls, token, seed, **params):
+        """A pending run seeded from one address (any accepted spelling)."""
+        run = cls.objects.create(token=token, **params)
+        run.seeds.set([Address.resolve(token.chain, seed)])
+        return run
+
+    @classmethod
+    def fetch_runs(cls):
+        return (
+            cls.objects.select_related("token__chain")
+            .prefetch_related("seeds")
+            .annotate(node_count=models.Count("nodes", distinct=True))
+            .annotate(edge_count=models.Count("edges", distinct=True))
+            .order_by("-created_at")
+        )
+
     @property
     def chain(self):
         return self.token.chain
+
+    @property
+    def is_finished(self):
+        return self.status in (TraceStatus.COMPLETED, TraceStatus.FAILED)
+
+    def fetch_nodes(self):
+        return self.nodes.select_related("address", "label").order_by("hop", "created_at")
+
+    def fetch_edges(self):
+        return self.edges.select_related(
+            "transfer__from_address", "transfer__to_address", "transfer__token"
+        ).order_by("hop", "transfer__timestamp", "transfer__log_index")
 
     def mark_running(self):
         self.status = TraceStatus.RUNNING
