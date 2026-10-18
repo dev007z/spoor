@@ -1,0 +1,68 @@
+{% load spoor_format %}
+<div id="trace-body"
+     {% if not run.is_finished %}hx-get="{% url 'tracing:trace_detail' run.pk %}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+
+  {% if run.status == "failed" %}
+    <div class="notice error">The trace stopped early: {{ run.error }} Results gathered before the failure are shown below.</div>
+  {% elif not run.is_finished %}
+    <div class="notice warn">Tracing... {{ run.addresses_expanded }} address{{ run.addresses_expanded|pluralize:"es" }} expanded so far. This page updates on its own.</div>
+  {% endif %}
+
+  <section class="stats">
+    <div class="stat"><div class="label">Status</div><div class="value"><span class="badge {{ run.status }}">{{ run.get_status_display }}</span></div></div>
+    <div class="stat"><div class="label">Addresses reached</div><div class="value">{{ stats.addresses }}</div></div>
+    <div class="stat"><div class="label">Transfers followed</div><div class="value">{{ stats.transfers }}</div></div>
+    <div class="stat"><div class="label">Labeled endpoints</div><div class="value">{{ stats.endpoints }}</div></div>
+  </section>
+
+  <section class="panel table-wrap">
+    <h2>Addresses</h2>
+    <table>
+      <thead>
+        <tr><th>Hop</th><th>Address</th><th>Label</th><th class="num">Received</th><th class="num">Sent</th><th>Outcome</th></tr>
+      </thead>
+      <tbody>
+        {% for row in node_rows %}
+          <tr>
+            <td>{{ row.node.hop }}</td>
+            <td class="mono" title="{{ row.node.address.address }}"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.node.address.address|short:8 }}</a></td>
+            <td>{% if row.node.label %}<span class="badge label" title="{{ row.node.label.source_url }}">{{ row.node.label.entity }}</span>{% endif %}</td>
+            <td class="num" title="{{ row.received|units }}">{% if row.received %}{{ row.received|amount }}{% endif %}</td>
+            <td class="num" title="{{ row.sent|units }}">{% if row.sent %}{{ row.sent|amount }}{% endif %}</td>
+            <td>
+              {% if row.node.stop_reason %}{{ row.node.get_stop_reason_display }}{% elif row.node.expanded %}Expanded{% else %}Queued{% endif %}
+              {% if row.node.fan_out_truncated %}<span class="flags">· more transfers than fan-out</span>{% endif %}
+              {% if row.node.fetch_incomplete %}<span class="flags">· provider results incomplete</span>{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="empty">Waiting for the worker to start.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel table-wrap">
+    <h2>Transfers followed</h2>
+    <table>
+      <thead>
+        <tr><th>Hop</th><th>Time (UTC)</th><th>From</th><th>To</th><th class="num">Amount</th><th>Transaction</th><th>Evidence</th></tr>
+      </thead>
+      <tbody>
+        {% for row in edge_rows %}
+          <tr>
+            <td>{{ row.edge.hop }} → {{ row.edge.hop|add:1 }}</td>
+            <td>{{ row.transfer.timestamp|date:"Y-m-d H:i:s" }}</td>
+            <td class="mono" title="{{ row.transfer.from_address.address }}">{{ row.transfer.from_address.address|short }}</td>
+            <td class="mono" title="{{ row.transfer.to_address.address }}">{{ row.transfer.to_address.address|short }}</td>
+            <td class="num" title="{{ row.transfer.amount_units|units }}">{{ row.transfer.amount_units|amount }} {{ run.token.symbol }}</td>
+            <td class="mono" title="{{ row.transfer.tx_hash }}"><a href="{{ row.tx_url }}" target="_blank" rel="noopener noreferrer">{{ row.transfer.tx_hash|short }}</a> <span class="lede">#{{ row.transfer.log_index }}</span></td>
+            <td><a href="{% url 'chains:evidence' row.transfer.raw_response_id %}">Response</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No transfers followed yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>

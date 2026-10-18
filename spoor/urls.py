@@ -7,4 +7,5 @@ from spoor.views import HomeView
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     path("", include("spoor.modules.chains.urls")),
+    path("", include("spoor.modules.tracing.urls")),
 ]
