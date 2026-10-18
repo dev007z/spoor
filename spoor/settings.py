@@ -14,6 +14,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "spoor",
+    "spoor.modules.chains",
+    "spoor.modules.labels",
 ]
 
 MIDDLEWARE = [
