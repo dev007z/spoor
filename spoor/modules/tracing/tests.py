@@ -12,14 +12,15 @@ from spoor.modules.labels.models import Label, LabelDataset
 from spoor.modules.tracing.engine import TraceEngine
 from spoor.modules.tracing.enums import StopReason, TraceDirection, TraceStatus
 from spoor.modules.tracing.graph import MAX_EDGE_WIDTH, build_graph, edge_width
+from spoor.modules.tracing.heuristics import CollectionWallet, evaluate_run
 from spoor.modules.tracing.models import TraceRun
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def addr(name):
-    """A readable fake EVM address: addr('a') -> 0xaaaa...aaaa."""
-    return "0x" + name * 40
+    """A readable fake EVM address: addr('a') -> 0xaaaa...aaaa, addr('a1') -> 0xa1a1...a1."""
+    return "0x" + (name * 40)[:40]
 
 
 def at(minutes):
@@ -494,3 +495,69 @@ class TestManualExpansion:
         response = csrf_client.post(self.expand_url(run, "a"))
 
         assert response.status_code == 403
+
+
+@pytest.mark.django_db
+class TestCollectionWalletHeuristic:
+    """Collection: many senders into hub "9", then most of it swept onward to "8"."""
+
+    def inflows(self, senders, minute=10, amount=100):
+        return [(name, "9", amount, minute + i) for i, name in enumerate(senders)]
+
+    def signals(self, usdt, edges):
+        run, _ = trace(usdt, edges, seeds=("9",), direction=TraceDirection.FORWARD, max_hops=1)
+        return list(node(run, "9").signals.all())
+
+    def test_fires_on_many_senders_then_a_sweep(self, usdt):
+        edges = self.inflows("abcde") + [("9", "8", 450, 60)]
+
+        [signal] = self.signals(usdt, edges)
+
+        assert signal.heuristic == "collection_wallet"
+        assert signal.confidence == "low"
+        assert "5 distinct senders" in signal.explanation
+        assert "90% of it onward in 1 transfer" in signal.explanation
+        assert signal.transfers.count() == 6
+
+    def test_many_more_senders_raise_confidence(self, usdt):
+        senders = [f"a{i}" for i in range(10)] + [f"b{i}" for i in range(5)]  # 15 distinct
+        edges = self.inflows(senders) + [("9", "8", 1500, 60)]
+
+        [signal] = self.signals(usdt, edges)
+
+        assert signal.confidence == "medium"
+
+    @pytest.mark.parametrize(
+        "edges",
+        [
+            pytest.param([*("abcd"), ("9", "8", 400, 60)], id="too-few-senders"),
+            pytest.param([*("abcde"), ("9", "8", 300, 60)], id="most-of-it-stays"),
+            pytest.param([*("abcde"), ("9", "8", 500, 60 * 30)], id="sweep-too-late"),
+            pytest.param([*("abcde"), ("9", "8", 500, 5)], id="sweep-before-inflows"),
+        ],
+    )
+    def test_does_not_fire_without_the_full_pattern(self, usdt, edges):
+        senders = [e for e in edges if isinstance(e, str)]
+        sweeps = [e for e in edges if not isinstance(e, str)]
+
+        assert self.signals(usdt, self.inflows(senders) + sweeps) == []
+
+    def test_reevaluation_clears_a_signal_that_no_longer_holds(self, usdt, monkeypatch):
+        run, _ = trace(
+            usdt, self.inflows("abcde") + [("9", "8", 450, 60)], seeds=("9",), max_hops=1
+        )
+        assert node(run, "9").signals.exists()
+
+        monkeypatch.setattr(CollectionWallet, "MIN_SENDERS", 6)
+        evaluate_run(run)
+
+        assert not node(run, "9").signals.exists()
+
+    def test_signals_reach_the_graph(self, usdt):
+        run, _ = trace(
+            usdt, self.inflows("abcde") + [("9", "8", 450, 60)], seeds=("9",), max_hops=1
+        )
+
+        hub = next(n for n in build_graph(run)["nodes"] if n["id"] == addr("9"))
+
+        assert hub["signals"][0]["name"] == "Collection wallet pattern"
