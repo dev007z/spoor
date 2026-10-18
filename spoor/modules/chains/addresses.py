@@ -40,6 +40,11 @@ def normalize_address(family, value):
     raise InvalidAddressError(f"Unsupported chain family: {family}")
 
 
+def is_tx_hash(value):
+    """True for a 32-byte hex value. Addresses are 20 bytes or base58, so this never matches one."""
+    return bool(HEX_32_BYTES.match(value.strip()))
+
+
 def normalize_tx_hash(family, value):
     match = HEX_32_BYTES.match(value.strip())
     if not match:

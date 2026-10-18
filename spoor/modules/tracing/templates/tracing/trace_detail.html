@@ -7,7 +7,11 @@
   <h1>{{ run.get_direction_display }}</h1>
   <p class="params">
     <span><strong>{{ run.token.symbol }}</strong> on {{ run.chain.name }}</span>
-    <span>Seed {% for seed in seeds %}<strong class="mono" title="{{ seed.address }}">{{ seed.address|short }}</strong>{% endfor %}</span>
+    {% if run.seed_tx_hash %}
+      <span>Seed transaction <a class="mono" href="{{ seed_tx_url }}" target="_blank" rel="noopener noreferrer" title="{{ run.seed_tx_hash }}">{{ run.seed_tx_hash|short }}</a></span>
+    {% else %}
+      <span>Seed {% for seed in seeds %}<strong class="mono" title="{{ seed.address }}">{{ seed.address|short }}</strong>{% endfor %}</span>
+    {% endif %}
     <span>{{ run.start|date:"Y-m-d H:i" }} to {{ run.end|date:"Y-m-d H:i" }} UTC</span>
     <span>Max <strong>{{ run.max_hops }}</strong> hops</span>
     <span>Fan-out <strong>{{ run.fan_out }}</strong></span>
