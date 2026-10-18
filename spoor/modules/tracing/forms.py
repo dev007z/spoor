@@ -26,7 +26,8 @@ class StartTraceForm(AddressTransfersForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["address"].label = "Seed address or transaction hash"
+        if "address" in self.fields:
+            self.fields["address"].label = "Seed address or transaction hash"
 
     def clean_target(self, cleaned, token, value):
         """A transaction hash seeds the trace from that transaction's transfers."""
