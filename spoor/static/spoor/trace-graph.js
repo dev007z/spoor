@@ -50,7 +50,6 @@
   function create() {
     return cytoscape({
       container,
-      wheelSensitivity: 0.3,
       style: [
         {
           selector: "node",
@@ -133,6 +132,31 @@
       ["Transfers", "Open in Transfers", node.transfers_url],
       ["Explorer", "View on explorer", node.explorer_url],
     ]);
+    if (node.expandable) panel.append(expandButton(node));
+  }
+
+  function expandButton(node) {
+    const button = document.createElement("button");
+    button.className = "primary";
+    button.textContent = "Expand this address";
+    button.addEventListener("click", () => {
+      button.disabled = true;
+      fetch(node.expand_url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "X-CSRFToken": document.querySelector("meta[name=csrf-token]").content },
+      })
+        .then((response) => response.json())
+        .then((body) => {
+          if (body.status) {
+            window.location.reload(); // the reloaded page shows the run live again
+          } else {
+            button.disabled = false;
+            panel.append(document.createTextNode(body.message));
+          }
+        });
+    });
+    return button;
   }
 
   function showEdge(edge) {
@@ -149,6 +173,11 @@
       cy = create();
       cy.on("tap", "node", (event) => showNode(event.target.data()));
       cy.on("tap", "edge", (event) => showEdge(event.target.data()));
+      // Cytoscape sizes its canvas once; keep it in step with the container.
+      new ResizeObserver(() => {
+        cy.resize();
+        cy.fit(undefined, 40);
+      }).observe(container);
     }
     const count = data.nodes.length + data.edges.length;
     if (count === shownCount) return;
