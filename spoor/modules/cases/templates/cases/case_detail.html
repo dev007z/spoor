@@ -37,6 +37,25 @@
     </table>
   </section>
 
+  <section class="panel table-wrap">
+    <h2>Notes</h2>
+    <table>
+      <thead><tr><th>Address</th><th>Note</th><th>By</th><th>When (UTC)</th></tr></thead>
+      <tbody>
+        {% for row in notes %}
+          <tr>
+            <td class="mono" title="{{ row.note.address.address }}"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.note.address.address|short }}</a></td>
+            <td class="wrap">{{ row.note.text|linebreaksbr }}</td>
+            <td>{{ row.note.author.get_username }}</td>
+            <td>{{ row.note.created_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="empty">No notes yet. Add them from an address in a trace graph.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
   <section class="panel">
     <h2>Activity</h2>
     <ol class="timeline">

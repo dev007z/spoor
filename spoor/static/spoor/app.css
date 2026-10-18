@@ -191,3 +191,10 @@ a.button.primary { background: var(--accent); border: 1px solid var(--accent); c
 .timeline li { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .timeline li:last-child { border-bottom: 0; }
 .timeline time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wrap { white-space: normal; min-width: 240px; }
+#graph-panel .notes { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+#graph-panel .notes ul { list-style: none; margin: 0 0 8px; padding: 0; }
+#graph-panel .notes li { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+#graph-panel .notes li p { margin: 2px 0 0; white-space: pre-wrap; }
+#graph-panel .notes textarea { width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+#graph-panel > button { margin-top: 12px; }

@@ -33,6 +33,7 @@ def build_graph(run):
             {
                 "id": address,
                 "node_id": str(node.pk),
+                "address_id": str(node.address_id),
                 "hop": node.hop,
                 "kind": node_kind(node, seed_ids),
                 "label": node.label.entity if node.label else None,
@@ -69,7 +70,8 @@ def build_graph(run):
         }
         for (source, target), pair in pairs.items()
     ]
-    return {"nodes": nodes, "edges": edges, "finished": run.is_finished}
+    notes_url = reverse("cases:address_notes", args=[run.case_id]) if run.case_id else None
+    return {"nodes": nodes, "edges": edges, "finished": run.is_finished, "notes_url": notes_url}
 
 
 def node_kind(node, seed_ids):

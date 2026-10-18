@@ -3,6 +3,7 @@ from django.db import models
 
 from spoor.common.mixins import ModelMixin
 from spoor.modules.cases.enums import CaseEventType, CaseType
+from spoor.modules.chains.models import Address
 
 
 class Case(ModelMixin):
@@ -59,4 +60,43 @@ class CaseEvent(ModelMixin):
     def save(self, *args, **kwargs):
         if not self._state.adding:
             raise ValueError("Case events are append-only.")
+        super().save(*args, **kwargs)
+
+
+class AddressNote(ModelMixin):
+    """An analyst's note about one address within a case. Append-only, like the history."""
+
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, related_name="notes")
+    address = models.ForeignKey(Address, on_delete=models.PROTECT, related_name="case_notes")
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="address_notes"
+    )
+    text = models.TextField()
+
+    def __str__(self):
+        return f"Note on {self.address} by {self.author}"
+
+    @classmethod
+    def add_note(cls, case, address, author, text):
+        note = cls.objects.create(case=case, address=address, author=author, text=text)
+        CaseEvent.record(
+            case,
+            author,
+            CaseEventType.NOTE_ADDED,
+            f"Noted {address.address}.",
+            address=address.address,
+            note=str(note.pk),
+        )
+        return note
+
+    @classmethod
+    def fetch_notes(cls, case, address=None):
+        notes = cls.objects.filter(case=case).select_related("author", "address__chain")
+        if address is not None:
+            notes = notes.filter(address=address)
+        return notes.order_by("-created_at")
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValueError("Notes are append-only; add a new note instead.")
         super().save(*args, **kwargs)

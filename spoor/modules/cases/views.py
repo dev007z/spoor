@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from spoor.modules.cases.forms import CaseForm
-from spoor.modules.cases.models import Case
+from spoor.modules.cases.models import AddressNote, Case
 
 
 class CaseListView(View):
@@ -35,5 +35,9 @@ class CaseDetailView(View):
             .prefetch_related("seeds")
             .order_by("-created_at"),
             "events": case.fetch_events()[:100],
+            "notes": [
+                {"note": note, "url": note.address.chain.address_url(note.address.address)}
+                for note in AddressNote.fetch_notes(case)
+            ],
         }
         return render(request, self.template_name, context)
