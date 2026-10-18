@@ -1,0 +1,135 @@
+{% load spoor_format %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Spoor report: {{ run.get_direction_display }}</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #5f6873; } }
+  body { font: 9.5pt/1.45 "DejaVu Sans", Helvetica, Arial, sans-serif; color: #16191d; margin: 0; }
+  h1 { font-size: 17pt; margin: 0 0 2pt; }
+  h2 { font-size: 11.5pt; margin: 16pt 0 6pt; border-bottom: 1px solid #dde1e6; padding-bottom: 3pt; }
+  p { margin: 0 0 6pt; }
+  .muted { color: #5f6873; }
+  .mono { font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace; font-size: 8pt; word-break: break-all; }
+  table { width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 6pt; }
+  th { text-align: left; color: #5f6873; font-weight: 600; border-bottom: 1px solid #c9ced4; padding: 3pt 4pt; }
+  td { border-bottom: 1px solid #eceff2; padding: 3pt 4pt; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .num { text-align: right; white-space: nowrap; }
+  dl { display: grid; grid-template-columns: 34mm 1fr; gap: 2pt 8pt; margin: 0; }
+  dt { color: #5f6873; }
+  dd { margin: 0; }
+  .notice { border: 1px solid #e3c88a; background: #fff8e6; padding: 6pt 8pt; margin: 8pt 0; }
+  .graph { max-width: 100%; border: 1px solid #dde1e6; }
+  .tag { display: inline-block; border: 1px solid #9aa4af; border-radius: 8pt; padding: 0 5pt; font-size: 7.5pt; }
+</style>
+</head>
+<body>
+  <h1>Spoor investigation report</h1>
+  <p class="muted">{% if run.case %}Case: {{ run.case.name }} · {% endif %}Issued {{ generated_at|date:"Y-m-d H:i:s" }} UTC by {{ generated_by.get_username }} · Spoor {{ spoor_version }}</p>
+
+  <div class="notice">This report is an investigative lead, not proof of who controls an address. Labels and heuristic signals can be wrong; every transfer below can be re-checked on-chain from its transaction hash and log index.</div>
+
+  <h2>Summary</h2>
+  <dl>
+    <dt>Trace</dt><dd>{{ run.get_direction_display }}</dd>
+    <dt>Token</dt><dd>{{ run.token.symbol }} on {{ run.chain.name }} <span class="mono">{{ run.token.contract }}</span></dd>
+    {% if run.seed_tx_hash %}<dt>Seed transaction</dt><dd class="mono">{{ run.seed_tx_hash }}</dd>{% endif %}
+    <dt>Seed address{{ seeds|pluralize:"es" }}</dt><dd class="mono">{% for seed in seeds %}{{ seed.address }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
+    <dt>Window (UTC)</dt><dd>{{ run.start|date:"Y-m-d H:i:s" }} to {{ run.end|date:"Y-m-d H:i:s" }}</dd>
+    <dt>Parameters</dt><dd>Max {{ run.max_hops }} hops; largest {{ run.fan_out }} transfers per address; minimum {{ min_amount_units|amount }} {{ run.token.symbol }}</dd>
+    <dt>Result</dt><dd>{{ stats.addresses }} addresses reached, {{ stats.transfers }} transfers followed, {{ stats.endpoints }} labeled endpoint{{ stats.endpoints|pluralize }}; status {{ run.get_status_display|lower }}{% if run.error %} ({{ run.error }}){% endif %}</dd>
+  </dl>
+
+  <h2>Exposure to labeled entities</h2>
+  {% if exposure %}
+    <table>
+      <thead><tr><th>Entity</th><th>Category</th><th>Hop</th><th>Address</th><th class="num">Received in trace</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for row in exposure %}
+          <tr>
+            <td>{{ row.label.entity }}</td>
+            <td>{{ row.label.get_category_display }}</td>
+            <td>{{ row.node.hop }}</td>
+            <td class="mono">{{ row.node.address.address }}</td>
+            <td class="num">{{ row.received|units }} {{ run.token.symbol }}</td>
+            <td class="mono">{{ row.label.source_url }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No labeled address was reached within the trace parameters.</p>
+  {% endif %}
+
+  {% if graph_image %}
+    <h2>Fund-flow graph</h2>
+    <img class="graph" src="{{ graph_image }}" alt="Fund-flow graph of the trace">
+  {% endif %}
+
+  <h2>Addresses</h2>
+  <table>
+    <thead><tr><th>Hop</th><th>Address</th><th>Label</th><th class="num">Received</th><th class="num">Sent</th><th>Outcome and signals</th></tr></thead>
+    <tbody>
+      {% for row in node_rows %}
+        <tr>
+          <td>{{ row.node.hop }}</td>
+          <td class="mono">{{ row.node.address.address }}</td>
+          <td>{% if row.node.label %}{{ row.node.label.entity }} ({{ row.node.label.get_category_display|lower }}){% endif %}</td>
+          <td class="num">{% if row.received %}{{ row.received|units }}{% endif %}</td>
+          <td class="num">{% if row.sent %}{{ row.sent|units }}{% endif %}</td>
+          <td>
+            {% if row.node.stop_reason %}{{ row.node.get_stop_reason_display }}{% elif row.node.expanded %}Expanded{% else %}Not expanded{% endif %}{% if row.node.fan_out_truncated %}; more transfers than fan-out{% endif %}{% if row.node.fetch_incomplete %}; provider results incomplete{% endif %}
+            {% for signal in row.node.signals.all %}<br><span class="tag">{{ signal.name }}, {{ signal.get_confidence_display|lower }} confidence</span> {{ signal.explanation }}{% endfor %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Transfers followed</h2>
+  <table>
+    <thead><tr><th>Hop</th><th>Time (UTC)</th><th>From / To</th><th class="num">Amount ({{ run.token.symbol }})</th><th>Transaction, log index, block</th><th>Ref</th></tr></thead>
+    <tbody>
+      {% for row in edge_rows %}
+        <tr>
+          <td>{{ row.edge.hop }}→{{ row.edge.hop|add:1 }}</td>
+          <td>{{ row.transfer.timestamp|date:"Y-m-d H:i:s" }}</td>
+          <td class="mono">{{ row.transfer.from_address.address }}<br>{{ row.transfer.to_address.address }}</td>
+          <td class="num">{{ row.transfer.amount_units|units }}</td>
+          <td class="mono">{{ row.transfer.tx_hash }} #{{ row.transfer.log_index }}<br>block {{ row.transfer.block_number }}<br>{{ row.tx_url }}</td>
+          <td>R{{ row.reference }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6">No transfers were followed.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Methodology</h2>
+  <p>Spoor traced {% if run.direction == "forward" %}forward from the seed, following each address's outgoing{% else %}backward from the seed, following each address's incoming{% endif %} {{ run.token.symbol }} transfers breadth-first, hop by hop, up to {{ run.max_hops }} hop{{ run.max_hops|pluralize }}.</p>
+  <p>At each address only transfers inside the window and at or above the minimum amount are considered, and only those consistent in time with how funds reached the address: {% if run.direction == "forward" %}outflows at or after its first followed inflow{% else %}inflows at or before its last followed outflow{% endif %}. The {{ run.fan_out }} largest are followed; when more qualify, the address is marked as truncated. Each address is expanded once, so cycles end.</p>
+  <p>The trace stops at addresses labeled as exchanges, bridges or mixers, where funds leave the traceable on-chain path. Labels come from named datasets with a public source each; sanctioned addresses come from the US Treasury OFAC SDN list. Heuristic signals describe transaction patterns and are not attribution.</p>
+  <p>Every transfer is parsed from a stored provider response, cited by reference below. Responses are stored byte for byte with their SHA-256; API keys are never stored.</p>
+
+  <h2>Data sources</h2>
+  <table>
+    <thead><tr><th>Ref</th><th>Provider</th><th>Request</th><th>Retrieved (UTC)</th><th>Body SHA-256</th></tr></thead>
+    <tbody>
+      {% for raw in sources %}
+        <tr>
+          <td>R{{ forloop.counter }}</td>
+          <td>{{ raw.source }}</td>
+          <td class="mono">{{ raw.endpoint }}{% if raw.params %} {{ raw.params|as_json }}{% endif %}</td>
+          <td>{{ raw.retrieved_at|date:"Y-m-d H:i:s" }}</td>
+          <td class="mono">{{ raw.body_sha256 }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Integrity</h2>
+  <p>Manifest SHA-256: <span class="mono">{{ manifest_sha256 }}</span></p>
+  <p class="muted">The manifest lists this trace's parameters and every cited response with its retrieval time and body hash. It is stored with the report; recomputing its hash and each response's body hash confirms nothing has changed since issue.</p>
+</body>
+</html>
