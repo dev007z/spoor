@@ -54,6 +54,7 @@
               {% if row.node.stop_reason %}{{ row.node.get_stop_reason_display }}{% elif row.node.expanded %}Expanded{% else %}Queued{% endif %}
               {% if row.node.fan_out_truncated %}<span class="flags">· more transfers than fan-out</span>{% endif %}
               {% if row.node.fetch_incomplete %}<span class="flags">· provider results incomplete</span>{% endif %}
+              {% for signal in row.node.signals.all %}<span class="badge signal" title="{{ signal.explanation }}">{{ signal.name }} ({{ signal.get_confidence_display|lower }})</span>{% endfor %}
             </td>
           </tr>
         {% empty %}

@@ -39,7 +39,13 @@
     const placed = positions(data.nodes);
     const nodes = data.nodes.map((node) => ({
       group: "nodes",
-      data: { ...node, name: node.label || short(node.id), color: nodeColor(node), flagged: node.fan_out_truncated || node.fetch_incomplete },
+      data: {
+        ...node,
+        name: node.label || short(node.id),
+        color: nodeColor(node),
+        flagged: node.fan_out_truncated || node.fetch_incomplete,
+        signalled: node.signals.length > 0,
+      },
       position: placed[node.id],
     }));
     const edges = data.edges.map((edge) => ({
@@ -71,6 +77,7 @@
         { selector: "node[kind = 'seed']", style: { width: 34, height: 34, shape: "diamond" } },
         { selector: "node[kind = 'endpoint']", style: { shape: "round-rectangle" } },
         { selector: "node[?flagged]", style: { "border-color": token("--warn-text"), "border-style": "dashed", "border-width": 3 } },
+        { selector: "node[?signalled]", style: { "border-color": token("--node-other"), "border-style": "double", "border-width": 5 } },
         { selector: "node:selected", style: { "border-color": token("--accent"), "border-width": 4, "border-style": "solid" } },
         {
           selector: "edge",
@@ -131,6 +138,7 @@
       ["Hop", String(node.hop)],
       ["Outcome", node.outcome],
       ...(flags.length ? [["Flags", flags.join("; ")]] : []),
+      ...node.signals.map((signal) => [`${signal.name} (${signal.confidence.toLowerCase()})`, signal.explanation]),
       ["Transfers", "Open in Transfers", node.transfers_url],
       ["Explorer", "View on explorer", node.explorer_url],
     ]);

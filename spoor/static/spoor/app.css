@@ -164,6 +164,7 @@ dl.facts dd { margin: 0; word-break: break-all; }
 .badge.failed { color: var(--out); border-color: currentColor; }
 .badge.running, .badge.pending { color: var(--warn-text); border-color: currentColor; }
 .badge.label { color: var(--accent); border-color: currentColor; }
+.badge.signal { color: var(--node-other); border-color: currentColor; margin-left: 4px; cursor: help; }
 
 .params { display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--muted); font-size: 14px; margin: 0 0 16px; }
 .params strong { color: var(--text); font-weight: 600; }
