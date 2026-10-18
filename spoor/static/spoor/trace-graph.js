@@ -260,6 +260,30 @@
       .catch(() => panel.replaceChildren(document.createTextNode("The graph could not be loaded.")));
   }
 
+  // Issuing a report sends the graph as drawn, so the report shows what the analyst saw.
+  const issueButton = document.getElementById("issue-report");
+  if (issueButton) {
+    issueButton.addEventListener("click", () => {
+      issueButton.disabled = true;
+      const graphImage = cy ? cy.png({ full: true, scale: 2, bg: token("--surface") }) : "";
+      fetch(issueButton.dataset.url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+        body: JSON.stringify({ graph_image: graphImage }),
+      })
+        .then((response) => response.json())
+        .then((body) => {
+          if (body.status) {
+            window.location.reload();
+          } else {
+            issueButton.disabled = false;
+            window.alert(body.message);
+          }
+        });
+    });
+  }
+
   // The trace body refreshes every few seconds while the run is live; redraw with it.
   document.body.addEventListener("htmx:afterSettle", load);
   load();

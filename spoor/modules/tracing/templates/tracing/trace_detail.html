@@ -41,6 +41,32 @@
 
   {% include "tracing/_trace_body.html" %}
 
+  <section class="panel table-wrap">
+    <div class="section-head">
+      <h2>Reports</h2>
+      <button id="issue-report" class="primary" data-url="{% url 'reports:issue_report' run.pk %}" {% if not run.is_finished %}disabled title="Available when the trace finishes"{% endif %}>Issue report</button>
+    </div>
+    <table>
+      <thead><tr><th>Issued (UTC)</th><th>By</th><th>Report</th><th>Manifest SHA-256</th><th>PDF SHA-256</th></tr></thead>
+      <tbody>
+        {% for report in reports %}
+          <tr>
+            <td>{{ report.created_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ report.created_by.get_username }}</td>
+            <td>
+              <a href="{% url 'reports:report_html' report.pk %}" target="_blank" rel="noopener">HTML</a>
+              {% if report.pdf_sha256 %} · <a href="{% url 'reports:report_pdf' report.pk %}">PDF</a>{% else %}<span class="lede" title="{{ report.pdf_error }}"> · no PDF</span>{% endif %}
+            </td>
+            <td class="mono" title="{{ report.manifest_sha256 }}">{{ report.manifest_sha256|short:8 }}</td>
+            <td class="mono" title="{{ report.pdf_sha256 }}">{% if report.pdf_sha256 %}{{ report.pdf_sha256|short:8 }}{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No reports issued yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
   <script src="{% static 'spoor/vendor/cytoscape.min.js' %}" defer></script>
   <script src="{% static 'spoor/trace-graph.js' %}" defer></script>
 {% endblock %}
