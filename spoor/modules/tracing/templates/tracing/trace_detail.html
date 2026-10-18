@@ -1,5 +1,5 @@
 {% extends "spoor/base.html" %}
-{% load spoor_format %}
+{% load spoor_format static %}
 
 {% block title %}Trace | Spoor{% endblock %}
 
@@ -14,5 +14,27 @@
     <span>Min <strong>{{ min_amount_units|amount }}</strong> {{ run.token.symbol }}</span>
   </p>
 
+  <section class="graph-layout">
+    <div>
+      <div id="trace-graph" data-graph-url="{% url 'tracing:trace_graph' run.pk %}" role="img" aria-label="Fund-flow graph of the trace"></div>
+      <p class="legend">
+        <span style="--dot: var(--node-seed)">Seed</span>
+        <span style="--dot: var(--node-address)">Unlabeled</span>
+        <span style="--dot: var(--node-exchange)">Exchange</span>
+        <span style="--dot: var(--node-bridge)">Bridge</span>
+        <span style="--dot: var(--node-mixer)">Mixer</span>
+        <span style="--dot: var(--node-sanctioned)">Sanctioned</span>
+        <span style="--dot: var(--node-scam)">Scam</span>
+        <span class="note">Dashed outline: results truncated</span>
+      </p>
+    </div>
+    <aside id="graph-panel" class="panel">
+      <p class="lede">Select an address or a flow to see its details.</p>
+    </aside>
+  </section>
+
   {% include "tracing/_trace_body.html" %}
+
+  <script src="{% static 'spoor/vendor/cytoscape.min.js' %}" defer></script>
+  <script src="{% static 'spoor/trace-graph.js' %}" defer></script>
 {% endblock %}
