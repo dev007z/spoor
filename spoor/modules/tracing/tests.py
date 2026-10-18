@@ -8,6 +8,7 @@ from spoor.modules.labels.enums import LabelCategory, LabelConfidence
 from spoor.modules.labels.models import Label, LabelDataset
 from spoor.modules.tracing.engine import TraceEngine
 from spoor.modules.tracing.enums import StopReason, TraceDirection, TraceStatus
+from spoor.modules.tracing.graph import MAX_EDGE_WIDTH, build_graph, edge_width
 from spoor.modules.tracing.models import TraceRun
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -272,3 +273,48 @@ class TestTracePages:
         assert 'hx-trigger="every 2s"' in polling
         assert "hx-trigger" not in finished.content.decode()
         assert finished.context["stats"] == {"addresses": 2, "transfers": 1, "endpoints": 0}
+
+
+@pytest.mark.django_db
+class TestTraceGraph:
+    def test_combines_transfers_per_address_pair(self, usdt):
+        run, _ = trace(usdt, [("a", "b", 100, 1), ("a", "b", 50, 2), ("b", "c", 30, 3)])
+
+        graph = build_graph(run)
+
+        flows = {(e["source"][2], e["target"][2]): e for e in graph["edges"]}
+        assert flows[("a", "b")]["count"] == 2
+        assert flows[("a", "b")]["amount"] == str(usdt.to_units(150))
+        assert flows[("a", "b")]["width"] > flows[("b", "c")]["width"]
+
+    def test_nodes_carry_kind_hop_and_links(self, usdt):
+        run, _ = trace(usdt, [("a", "b", 100, 1)])
+
+        nodes = {n["id"][2]: n for n in build_graph(run)["nodes"]}
+
+        assert nodes["a"]["kind"] == "seed"
+        assert nodes["b"]["hop"] == 1
+        assert nodes["b"]["outcome"] == "No qualifying transfers"
+        assert nodes["b"]["transfers_url"].startswith("/transfers/?")
+
+    def test_edge_width_is_log_scaled_within_bounds(self):
+        assert edge_width(0, 0) == 1
+        assert edge_width(10**24, 10**24) == MAX_EDGE_WIDTH
+        assert 1 < edge_width(10**12, 10**24) < MAX_EDGE_WIDTH
+
+    def test_api_returns_the_graph_in_the_envelope(self, admin_client, usdt):
+        run, _ = trace(usdt, [("a", "b", 100, 1)])
+
+        body = admin_client.get(f"/api/v1/traces/{run.pk}/graph/").json()
+
+        assert body["status"] is True
+        assert len(body["data"]["nodes"]) == 2
+        assert body["data"]["finished"] is True
+
+    def test_api_requires_login(self, client, usdt):
+        run = make_run(usdt)
+
+        response = client.get(f"/api/v1/traces/{run.pk}/graph/")
+
+        assert response.status_code == 403
+        assert response.json()["status"] is False
