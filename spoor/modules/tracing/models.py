@@ -70,6 +70,11 @@ class TraceRun(ModelMixin):
             "transfer__from_address", "transfer__to_address", "transfer__token"
         ).order_by("hop", "transfer__timestamp", "transfer__log_index")
 
+    def mark_queued(self):
+        self.status = TraceStatus.PENDING
+        self.error = ""
+        self.save(update_fields=["status", "error", "updated_at"])
+
     def mark_running(self):
         self.status = TraceStatus.RUNNING
         self.started_at = timezone.now()
