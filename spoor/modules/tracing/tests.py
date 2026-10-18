@@ -379,6 +379,14 @@ class TestTraceGraph:
         assert nodes["b"]["outcome"] == "No qualifying transfers"
         assert nodes["b"]["transfers_url"].startswith("/transfers/?")
 
+    def test_notes_url_only_for_traces_in_a_case(self, usdt, admin_user):
+        case = Case.create_case(admin_user, name="Case", case_type=CaseType.OTHER)
+        in_case, _ = trace(usdt, [("a", "b", 1, 1)], case=case)
+        loose, _ = trace(usdt, [("c", "d", 1, 1)], seeds=("c",))
+
+        assert build_graph(in_case)["notes_url"] == f"/api/v1/cases/{case.pk}/notes/"
+        assert build_graph(loose)["notes_url"] is None
+
     def test_edge_width_is_log_scaled_within_bounds(self):
         assert edge_width(0, 0) == 1
         assert edge_width(10**24, 10**24) == MAX_EDGE_WIDTH

@@ -1,7 +1,8 @@
 import pytest
 
 from spoor.modules.cases.enums import CaseEventType, CaseType
-from spoor.modules.cases.models import Case, CaseEvent
+from spoor.modules.cases.models import AddressNote, Case, CaseEvent
+from spoor.modules.chains.models import Address, Chain
 
 
 @pytest.fixture
@@ -60,3 +61,64 @@ class TestCasePages:
             "Noted an address.",
             'Opened case "Case".',
         ]
+
+
+@pytest.mark.django_db
+class TestAddressNotes:
+    @pytest.fixture
+    def case(self, analyst):
+        return Case.create_case(analyst, name="Case", case_type=CaseType.OTHER)
+
+    @pytest.fixture
+    def address(self):
+        return Address.resolve(Chain.get_chain(key="bsc"), "0x" + "ab" * 20)
+
+    def url(self, case):
+        return f"/api/v1/cases/{case.pk}/notes/"
+
+    def test_adding_a_note_records_it_in_the_case_history(self, client, analyst, case, address):
+        client.force_login(analyst)
+
+        response = client.post(
+            self.url(case),
+            {"address_id": str(address.pk), "text": "Looks like a payout wallet."},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        assert response.json()["data"]["author"] == "analyst"
+        event = case.events.get(event_type=CaseEventType.NOTE_ADDED)
+        assert event.details["address"] == address.address
+
+    def test_notes_are_listed_per_address_newest_first(self, client, analyst, case, address):
+        client.force_login(analyst)
+        other = Address.resolve(address.chain, "0x" + "cd" * 20)
+        AddressNote.add_note(case, address, analyst, "first")
+        AddressNote.add_note(case, address, analyst, "second")
+        AddressNote.add_note(case, other, analyst, "elsewhere")
+
+        body = client.get(self.url(case), {"address_id": str(address.pk)}).json()
+
+        assert [note["text"] for note in body["data"]] == ["second", "first"]
+
+    def test_empty_note_is_a_validation_error_in_the_envelope(self, client, analyst, case, address):
+        client.force_login(analyst)
+
+        response = client.post(
+            self.url(case),
+            {"address_id": str(address.pk), "text": ""},
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == ["text: This field may not be blank."]
+
+    def test_notes_cannot_be_edited(self, analyst, case, address):
+        note = AddressNote.add_note(case, address, analyst, "original")
+
+        note.text = "rewritten"
+        with pytest.raises(ValueError):
+            note.save()
+
+    def test_notes_api_requires_login(self, client, case):
+        assert client.get(self.url(case), {"address_id": "x"}).status_code == 403
