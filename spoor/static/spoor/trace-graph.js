@@ -14,6 +14,8 @@
 
   let cy = null;
   let shownCount = -1;
+  let notesUrl = null; // set when the trace belongs to a case
+  const csrfToken = () => document.querySelector("meta[name=csrf-token]").content;
 
   function nodeColor(node) {
     if (node.kind === "seed") return token("--node-seed");
@@ -133,6 +135,61 @@
       ["Explorer", "View on explorer", node.explorer_url],
     ]);
     if (node.expandable) panel.append(expandButton(node));
+    if (notesUrl) panel.append(notesSection(node));
+  }
+
+  function notesSection(node) {
+    const section = document.createElement("section");
+    section.className = "notes";
+    const heading = document.createElement("h2");
+    heading.textContent = "Case notes";
+    const list = document.createElement("ul");
+    const input = document.createElement("textarea");
+    input.rows = 3;
+    input.placeholder = "Add a note about this address";
+    input.setAttribute("aria-label", "Note text");
+    const button = document.createElement("button");
+    button.textContent = "Add note";
+    button.addEventListener("click", () => {
+      if (!input.value.trim()) return;
+      button.disabled = true;
+      fetch(notesUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+        body: JSON.stringify({ address_id: node.address_id, text: input.value }),
+      })
+        .then((response) => response.json())
+        .then((body) => {
+          button.disabled = false;
+          if (body.status) {
+            input.value = "";
+            loadNotes(node, list);
+          }
+        });
+    });
+    section.append(heading, list, input, button);
+    loadNotes(node, list);
+    return section;
+  }
+
+  function loadNotes(node, list) {
+    const url = `${notesUrl}?address_id=${encodeURIComponent(node.address_id)}`;
+    fetch(url, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+      .then((response) => response.json())
+      .then((body) => {
+        list.replaceChildren();
+        (body.data || []).forEach((note) => {
+          const item = document.createElement("li");
+          const meta = document.createElement("span");
+          meta.className = "lede";
+          meta.textContent = `${note.author}, ${new Date(note.created_at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+          const text = document.createElement("p");
+          text.textContent = note.text;
+          item.append(meta, text);
+          list.append(item);
+        });
+      });
   }
 
   function expandButton(node) {
@@ -144,7 +201,7 @@
       fetch(node.expand_url, {
         method: "POST",
         credentials: "same-origin",
-        headers: { Accept: "application/json", "X-CSRFToken": document.querySelector("meta[name=csrf-token]").content },
+        headers: { Accept: "application/json", "X-CSRFToken": csrfToken() },
       })
         .then((response) => response.json())
         .then((body) => {
@@ -169,6 +226,7 @@
   }
 
   function render(data) {
+    notesUrl = data.notes_url;
     if (!cy) {
       cy = create();
       cy.on("tap", "node", (event) => showNode(event.target.data()));
