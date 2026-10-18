@@ -1,6 +1,26 @@
+import pytest
 from rest_framework.exceptions import NotFound, ValidationError
 
 from spoor.common.exceptions import exception_handler
+from spoor.common.functions import to_raw, to_units
+
+UINT256_MAX = 2**256 - 1
+
+
+class TestAmountConversion:
+    def test_to_units_is_exact_for_uint256_max(self):
+        """The default decimal context would round this 78-digit value at 28 digits."""
+        assert to_raw(to_units(UINT256_MAX, 18), 18) == UINT256_MAX
+
+    def test_to_units_keeps_token_precision(self):
+        assert str(to_units(1_500_000, 6)) == "1.500000"
+
+    def test_to_raw_from_string_units(self):
+        assert to_raw("1.5", 6) == 1_500_000
+
+    def test_to_raw_rejects_precision_the_token_cannot_hold(self):
+        with pytest.raises(ValueError):
+            to_raw("0.0000001", 6)
 
 
 class TestExceptionHandlerEnvelope:
