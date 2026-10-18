@@ -17,3 +17,4 @@ class CaseEventType(models.TextChoices):
     TRACE_STARTED = "trace_started", "Trace started"
     TRACE_EXPANDED = "trace_expanded", "Address expanded"
     NOTE_ADDED = "note_added", "Note added"
+    REPORT_EXPORTED = "report_exported", "Report issued"

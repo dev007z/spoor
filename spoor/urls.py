@@ -11,4 +11,5 @@ urlpatterns = [
     path("", include("spoor.modules.labels.urls")),
     path("", include("spoor.modules.screening.urls")),
     path("", include("spoor.modules.tracing.urls")),
+    path("", include("spoor.modules.reports.urls")),
 ]

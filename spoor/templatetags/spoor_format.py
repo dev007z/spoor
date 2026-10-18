@@ -1,3 +1,4 @@
+import json
 from decimal import ROUND_HALF_EVEN, Decimal
 
 from django import template
@@ -40,3 +41,9 @@ def amount(value):
 def address_url(chain, address):
     """Explorer link for an address on a chain: {{ chain|address_url:address }}."""
     return chain.address_url(address)
+
+
+@register.filter
+def as_json(value):
+    """Compact, key-sorted JSON, as stored request parameters should be cited."""
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
