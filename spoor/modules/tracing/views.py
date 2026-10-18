@@ -28,7 +28,7 @@ class TraceListView(View):
             data["token"],
             case=data["case"],
             created_by=request.user,
-            seed_address=data["address"],
+            seed_addresses=[data["address"]] if data["address"] else [],
             seed_tx_hash=data["seed_tx_hash"],
             direction=data["direction"],
             start=data["start"],

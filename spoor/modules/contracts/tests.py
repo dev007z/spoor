@@ -3,11 +3,15 @@ import json
 import httpx
 import pytest
 
+from spoor.modules.cases.enums import CaseType
+from spoor.modules.cases.models import Case
 from spoor.modules.chains.adapters.replay import ReplayTransport
 from spoor.modules.chains.models import Chain
 from spoor.modules.contracts.etherscan import EtherscanClient, EtherscanError, split_source_files
 from spoor.modules.contracts.models import Contract
+from spoor.modules.contracts.onchain import Ownership
 from spoor.modules.contracts.services import fetch_contract
+from spoor.modules.tracing.models import TraceRun
 
 BSC_USDT = "0x55d398326f99059ff775485246999027b3197955"
 USDC_PROXY = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
@@ -60,6 +64,14 @@ class TestFetchContract:
         assert len(implementation.source_files) > 10
         assert Contract.objects.count() == 2
 
+    def test_deployer_is_recorded_where_the_plan_allows(self):
+        proxy = fetch_contract(Chain.get_chain(key="ethereum"), USDC_PROXY, recorded_client())
+        bsc = fetch_contract(Chain.get_chain(key="bsc"), BSC_USDT, recorded_client())
+
+        assert proxy.deployer.startswith("0x") and len(proxy.creation_tx) == 66
+        assert bsc.deployer == ""
+        assert "not supported for this chain" in bsc.deployer_note
+
     def test_key_never_reaches_the_evidence(self):
         contract = fetch_contract(Chain.get_chain(key="bsc"), BSC_USDT, recorded_client())
 
@@ -105,3 +117,44 @@ class TestContractPages:
         response = admin_client.post("/contracts/", {"chain": bsc.pk, "address": BSC_USDT})
 
         assert "ETHERSCAN_API_KEY" in response.context["error"]
+
+
+@pytest.mark.django_db
+class TestTraceDeployer:
+    def test_starts_a_trace_from_deployer_owner_and_added_wallets(
+        self, admin_client, admin_user, monkeypatch, django_capture_on_commit_callbacks
+    ):
+        owner = "0x" + "77" * 20
+        monkeypatch.setattr(
+            "spoor.modules.contracts.analysis.read_ownership",
+            lambda *a, **k: Ownership(owner=owner, renounced=False, raw_response=None),
+        )
+        monkeypatch.setattr(
+            "spoor.modules.contracts.analysis.analyze_liquidity", lambda *a, **k: None
+        )
+        monkeypatch.setattr("spoor.modules.contracts.views.run_trace.delay", lambda run_id: None)
+        contract = fetch_contract(Chain.get_chain(key="ethereum"), USDC_PROXY, recorded_client())
+        case = Case.create_case(admin_user, name="Case", case_type=CaseType.RUG_PULL)
+        usdt = contract.chain.tokens.get(symbol="USDT")
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = admin_client.post(
+                f"/contracts/{contract.pk}/trace/",
+                {
+                    "token": usdt.pk,
+                    "start": "2026-01-01T00:00",
+                    "end": "2026-01-02T00:00",
+                    "direction": "forward",
+                    "max_hops": 2,
+                    "fan_out": 3,
+                    "min_amount": "0",
+                    "case": case.pk,
+                    "extra_wallets": "0x" + "8A" * 20,
+                },
+            )
+
+        run = TraceRun.objects.get()
+        assert response.url == f"/traces/{run.pk}/"
+        assert {s.address for s in run.seeds.all()} == {contract.deployer, owner, "0x" + "8a" * 20}
+        assert run.case == case
+        assert case.events.filter(summary__startswith="Started tracing the deployer").exists()

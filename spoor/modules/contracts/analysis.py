@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from spoor.modules.contracts.checks import Finding, Severity, run_checks
+from spoor.modules.contracts.liquidity import analyze_liquidity
 from spoor.modules.contracts.models import Contract
 from spoor.modules.contracts.onchain import read_ownership
 
@@ -12,6 +13,7 @@ class Analysis:
     logic: Contract  # the contract whose code runs: the implementation behind a proxy
     findings: list
     ownership: object  # onchain.Ownership, or None when there is no owner()
+    liquidity: object  # liquidity.Liquidity, or None when no DEX is configured for the chain
 
 
 def implementation_of(contract):
@@ -29,8 +31,12 @@ def analyze_contract(contract, adapter=None):
     ownership = read_ownership(contract, abi_contract=logic, adapter=adapter)
     if ownership and ownership.owner:
         findings.append(ownership_finding(ownership, findings))
+    owner = ownership.owner if ownership else None
+    liquidity = analyze_liquidity(contract, owner=owner, adapter=adapter)
+    if liquidity:
+        findings.extend(liquidity.findings)
     findings.sort(key=lambda f: Severity.ORDER.index(f.severity))
-    return Analysis(logic=logic, findings=findings, ownership=ownership)
+    return Analysis(logic=logic, findings=findings, ownership=ownership, liquidity=liquidity)
 
 
 def ownership_finding(ownership, findings):

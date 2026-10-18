@@ -15,6 +15,11 @@ class Contract(ModelMixin):
     abi = models.JSONField(default=list)
     is_proxy = models.BooleanField(default=False)
     implementation = models.CharField(max_length=64, blank=True)
+    deployer = models.CharField(max_length=64, blank=True)
+    creation_tx = models.CharField(max_length=66, blank=True)
+    deployer_note = models.CharField(
+        max_length=300, blank=True, help_text="Why the deployer is unknown, when it is."
+    )
     raw_response = models.ForeignKey(
         RawResponse, on_delete=models.PROTECT, related_name="contracts"
     )

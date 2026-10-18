@@ -53,3 +53,9 @@ def as_json(value):
 def tail_path(path, parts=2):
     """The last few segments of a long source path: contracts/v1/FiatTokenV1.sol."""
     return "/".join(str(path).split("/")[-int(parts) :])
+
+
+@register.filter
+def tx_url(chain, tx_hash):
+    """Explorer link for a transaction on a chain: {{ chain|tx_url:tx_hash }}."""
+    return chain.tx_url(tx_hash)

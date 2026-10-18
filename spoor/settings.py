@@ -85,6 +85,26 @@ SPOOR_CONTRACT_CHECKS = [
     "spoor.modules.contracts.checks.HiddenOwnership",
 ]
 
+# Uniswap V2 style DEXes whose pairs the liquidity analysis checks, per chain.
+SPOOR_DEXES = {
+    "bsc": {
+        "name": "PancakeSwap V2",
+        "factory": "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+        "quote_tokens": {
+            "WBNB": "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+            "USDT": "0x55d398326f99059ff775485246999027b3197955",
+        },
+    },
+    "ethereum": {
+        "name": "Uniswap V2",
+        "factory": "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",
+        "quote_tokens": {
+            "WETH": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "USDT": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        },
+    },
+}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",

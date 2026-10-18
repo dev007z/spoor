@@ -54,6 +54,22 @@ class EtherscanClient:
             result = parse_source(data["result"][0])
         return result, raw
 
+    def get_creation(self, chain, address):
+        """(deployer, creation tx hash). Raises EtherscanError where the plan lacks the chain."""
+        params = {
+            "chainid": chain.evm_chain_id,
+            "module": "contract",
+            "action": "getcontractcreation",
+            "contractaddresses": address,
+            "apikey": self.api_key,
+        }
+        # A contract's creation never changes.
+        data, _ = self.client.get_json(BASE_URL, params, cacheable=True, check=check_etherscan)
+        item = data["result"][0]
+        return chain.normalize_address(item["contractCreator"]), chain.normalize_tx_hash(
+            item["txHash"]
+        )
+
 
 def parse_source(item):
     source_code = item.get("SourceCode", "")

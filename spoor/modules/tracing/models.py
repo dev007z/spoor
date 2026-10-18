@@ -54,12 +54,11 @@ class TraceRun(ModelMixin):
         return f"{self.get_direction_display()} trace of {self.token} ({self.status})"
 
     @classmethod
-    def create_run(cls, token, seed_address=None, seed_tx_hash="", **params):
-        """A pending run seeded from an address, or from a transaction whose transfers the
-        worker resolves into seeds when the run starts."""
+    def create_run(cls, token, seed_addresses=(), seed_tx_hash="", **params):
+        """A pending run seeded from addresses (any accepted spelling), or from a
+        transaction whose transfers the worker resolves into seeds when the run starts."""
         run = cls.objects.create(token=token, seed_tx_hash=seed_tx_hash, **params)
-        if seed_address:
-            run.seeds.set([Address.resolve(token.chain, seed_address)])
+        run.seeds.set([Address.resolve(token.chain, value) for value in seed_addresses])
         return run
 
     @classmethod
