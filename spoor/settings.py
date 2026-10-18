@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "spoor.modules.chains",
     "spoor.modules.labels",
     "spoor.modules.cases",
+    "spoor.modules.screening",
     "spoor.modules.tracing",
 ]
 

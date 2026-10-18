@@ -5,6 +5,7 @@ from django.views import View
 from spoor.common.functions import to_units
 from spoor.modules.cases.enums import CaseEventType
 from spoor.modules.cases.models import CaseEvent
+from spoor.modules.screening.exposure import trace_exposure
 from spoor.modules.tracing.enums import StopReason
 from spoor.modules.tracing.forms import StartTraceForm
 from spoor.modules.tracing.models import TraceRun
@@ -97,6 +98,7 @@ def trace_context(run):
         "min_amount_units": to_units(run.min_amount, token.decimals),
         "node_rows": node_rows,
         "edge_rows": edge_rows,
+        "exposure": trace_exposure(run),
         "stats": {
             "addresses": len(nodes),
             "transfers": len(edges),

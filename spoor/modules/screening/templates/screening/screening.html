@@ -1,0 +1,11 @@
+{% extends "spoor/base.html" %}
+
+{% block title %}Screening | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Screening</h1>
+  <p class="lede">Is this address labeled, and did it deal directly with a labeled address in the window? Deeper exposure needs a trace.</p>
+  <div id="screening">
+    {% include "screening/_screening_body.html" %}
+  </div>
+{% endblock %}

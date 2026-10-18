@@ -15,6 +15,27 @@
     <div class="stat"><div class="label">Labeled endpoints</div><div class="value">{{ stats.endpoints }}</div></div>
   </section>
 
+  {% if exposure %}
+    <section class="panel table-wrap">
+      <h2>Exposure</h2>
+      <table>
+        <thead><tr><th>Entity</th><th>Category</th><th>Hop</th><th>Address</th><th class="num">Received in trace</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for row in exposure %}
+            <tr>
+              <td class="wrap">{{ row.label.entity }}</td>
+              <td><span class="badge label">{{ row.label.get_category_display }}</span></td>
+              <td>{{ row.node.hop }}</td>
+              <td class="mono" title="{{ row.node.address.address }}">{{ row.node.address.address|short }}</td>
+              <td class="num" title="{{ row.received|units }}">{% if row.received %}{{ row.received|amount }} {{ run.token.symbol }}{% endif %}</td>
+              <td><a href="{{ row.label.source_url }}" target="_blank" rel="noopener noreferrer">Source</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
   <section class="panel table-wrap">
     <h2>Addresses</h2>
     <table>

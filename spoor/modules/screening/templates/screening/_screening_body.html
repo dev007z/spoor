@@ -1,0 +1,78 @@
+{% load spoor_format %}
+<form class="panel" method="post" action="{% url 'screening:screen' %}"
+      hx-post="{% url 'screening:screen' %}" hx-target="#screening"
+      hx-disabled-elt="find button" hx-indicator="#screening-fetch">
+  {% csrf_token %}
+  <div class="form-grid">
+    {% for field in form %}
+      <div class="field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <div class="field"><button type="submit" class="primary">Screen</button></div>
+  </div>
+  <p id="screening-fetch" class="htmx-indicator lede">Fetching the window's transfers, then checking every counterparty against the labels.</p>
+</form>
+
+{% if fetch_error %}
+  <div class="notice error">The provider request failed: {{ fetch_error }} Screening used transfers already stored.</div>
+{% elif fetch_complete is False %}
+  <div class="notice warn">Only the first {{ fetched }} transfers were fetched. Narrow the window to screen everything.</div>
+{% endif %}
+
+{% if result %}
+  {% if result.verdict == "direct" %}
+    <div class="notice error"><strong>Direct match.</strong> This address is labeled {% for label in result.direct_labels %}{{ label.get_category_display|lower }} ({{ label.entity }}){% if not forloop.last %}; {% endif %}{% endfor %}.</div>
+  {% elif result.verdict == "indirect" %}
+    <div class="notice warn"><strong>One-hop exposure.</strong> {{ result.counterparties|length }} of {{ result.counterparty_count }} counterparties in this window are labeled.</div>
+  {% else %}
+    <div class="notice">No labeled address and no labeled counterparties among {{ result.transfer_count }} stored transfers in this window. That is not proof of no exposure: <a href="{{ trace_url }}">trace deeper</a>.</div>
+  {% endif %}
+
+  {% if result.direct_labels %}
+    <section class="panel table-wrap">
+      <h2>Labels on this address</h2>
+      <table>
+        <thead><tr><th>Entity</th><th>Category</th><th>Confidence</th><th>Dataset</th><th>Source</th></tr></thead>
+        <tbody>
+          {% for label in result.direct_labels %}
+            <tr>
+              <td class="wrap">{{ label.entity }}</td>
+              <td><span class="badge label">{{ label.get_category_display }}</span></td>
+              <td>{{ label.get_confidence_display }}</td>
+              <td>{{ label.dataset.name }}</td>
+              <td><a href="{{ label.source_url }}" target="_blank" rel="noopener noreferrer">Source</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
+  <section class="panel table-wrap">
+    <div class="section-head">
+      <h2>Labeled counterparties</h2>
+      <a class="button" href="{{ trace_url }}">Trace from this address</a>
+    </div>
+    <table>
+      <thead><tr><th>Counterparty</th><th>Entity</th><th>Category</th><th class="num">Received from</th><th class="num">Sent to</th><th class="num">Transfers</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for exposure in result.counterparties %}
+          <tr>
+            <td class="mono" title="{{ exposure.address.address }}"><a href="{{ chain|address_url:exposure.address.address }}" target="_blank" rel="noopener noreferrer">{{ exposure.address.address|short }}</a></td>
+            <td class="wrap">{{ exposure.label.entity }}</td>
+            <td><span class="badge label">{{ exposure.label.get_category_display }}</span></td>
+            <td class="num" title="{{ exposure.received_from|units }}">{% if exposure.received_from %}{{ exposure.received_from|amount }} {{ token.symbol }}{% endif %}</td>
+            <td class="num" title="{{ exposure.sent_to|units }}">{% if exposure.sent_to %}{{ exposure.sent_to|amount }} {{ token.symbol }}{% endif %}</td>
+            <td class="num">{{ exposure.transfers }}</td>
+            <td><a href="{{ exposure.label.source_url }}" target="_blank" rel="noopener noreferrer">Source</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No labeled counterparties in this window.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}

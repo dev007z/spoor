@@ -9,5 +9,6 @@ urlpatterns = [
     path("", include("spoor.modules.chains.urls")),
     path("", include("spoor.modules.cases.urls")),
     path("", include("spoor.modules.labels.urls")),
+    path("", include("spoor.modules.screening.urls")),
     path("", include("spoor.modules.tracing.urls")),
 ]
