@@ -3,6 +3,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 
 from spoor.common.exceptions import exception_handler
 from spoor.common.functions import to_raw, to_units
+from spoor.templatetags.spoor_format import amount, units
 
 UINT256_MAX = 2**256 - 1
 
@@ -67,3 +68,12 @@ class TestExceptionHandlerEnvelope:
         assert response.status_code == 500
         assert response.data["error_code"] == "server_error"
         assert "hunter2" not in response.data["message"]
+
+
+class TestAmountFormatting:
+    def test_display_rounds_to_six_places_and_drops_trailing_zeros(self):
+        exact = to_units(205_454909702152215175, 18)
+
+        assert amount(exact) == "205.45491"
+        assert units(exact) == "205.454909702152215175"
+        assert amount(to_units(1_000_000_000, 6)) == "1,000"

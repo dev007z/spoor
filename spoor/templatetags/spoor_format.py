@@ -1,3 +1,5 @@
+from decimal import ROUND_HALF_EVEN, Decimal
+
 from django import template
 
 register = template.Library()
@@ -16,5 +18,19 @@ def short(value, keep=6):
 def units(value):
     """Group thousands without dropping or rounding any of a token amount's decimals."""
     whole, _, fraction = f"{value:f}".partition(".")
+    grouped = f"{int(whole):,}"
+    return f"{grouped}.{fraction}" if fraction else grouped
+
+
+DISPLAY_PLACES = Decimal("0.000001")
+
+
+@register.filter
+def amount(value):
+    """Readable token amount: at most 6 decimals, trailing zeros dropped. Pair with a title
+    holding the exact `units` value, since rounding is for display only."""
+    rounded = value.quantize(DISPLAY_PLACES, rounding=ROUND_HALF_EVEN)
+    whole, _, fraction = f"{rounded:f}".partition(".")
+    fraction = fraction.rstrip("0")
     grouped = f"{int(whole):,}"
     return f"{grouped}.{fraction}" if fraction else grouped
