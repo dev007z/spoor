@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 from django.db import IntegrityError
 
+from spoor.modules.chains.adapters.base import FetchResult
 from spoor.modules.chains.addresses import (
     InvalidAddressError,
     InvalidTxHashError,
@@ -220,3 +221,90 @@ class TestEvidenceIsReadOnlyInAdmin:
 
         response.refresh_from_db()
         assert response.body == "{}"
+
+
+@pytest.mark.django_db
+class TestAddressTransfersPage:
+    URL = "/transfers/"
+
+    @pytest.fixture
+    def stored(self):
+        """One incoming and one outgoing USDT transfer for a TRON address."""
+        tron = Chain.get_chain(key="tron")
+        usdt = Token.objects.get(chain=tron, symbol="USDT")
+        subject = Address.resolve(tron, USDT_TRON_BASE58)
+        other = Address.resolve(tron, "0x" + "22" * 20)
+        raw = RawResponse.record(
+            source="example", endpoint="https://x.test", params={}, status_code=200, body="{}"
+        )
+        common = {"chain": tron, "token": usdt, "block_number": 1, "raw_response": raw}
+        Transfer.objects.create(
+            tx_hash="a" * 64,
+            log_index=0,
+            amount=2_500_000,
+            from_address=other,
+            to_address=subject,
+            timestamp=datetime(2026, 1, 1, 12, tzinfo=UTC),
+            **common,
+        )
+        Transfer.objects.create(
+            tx_hash="b" * 64,
+            log_index=0,
+            amount=1_000_000,
+            from_address=subject,
+            to_address=other,
+            timestamp=datetime(2026, 1, 1, 13, tzinfo=UTC),
+            **common,
+        )
+        return {"token": usdt, "raw": raw}
+
+    def query(self, token, address=USDT_TRON_HEX):
+        return {
+            "token": token.pk,
+            "address": address,
+            "start": "2026-01-01T00:00",
+            "end": "2026-01-02T00:00",
+        }
+
+    def test_requires_login(self, client):
+        assert client.get(self.URL).status_code == 302
+
+    def test_shows_stored_transfers_with_totals(self, admin_client, stored):
+        """Any spelling of the address finds the same stored transfers."""
+        response = admin_client.get(self.URL, self.query(stored["token"]))
+
+        assert response.status_code == 200
+        assert response.context["stats"]["count"] == 2
+        assert str(response.context["stats"]["total_in"]) == "2.500000"
+        assert str(response.context["stats"]["total_out"]) == "1.000000"
+        assert [row["incoming"] for row in response.context["rows"]] == [True, False]
+
+    def test_invalid_address_is_a_field_error(self, admin_client, stored):
+        response = admin_client.get(self.URL, self.query(stored["token"], address="0x1234"))
+
+        assert "address" in response.context["form"].errors
+        assert "rows" not in response.context
+
+    def test_htmx_fetch_returns_the_body_partial_and_a_shareable_url(
+        self, admin_client, stored, monkeypatch
+    ):
+        class NoNewTransfers:
+            def get_token_transfers(self, *args):
+                return FetchResult(records=[], complete=True)
+
+        monkeypatch.setattr(
+            "spoor.modules.chains.views.get_adapter", lambda chain: NoNewTransfers()
+        )
+
+        response = admin_client.post(self.URL, self.query(stored["token"]), HTTP_HX_REQUEST="true")
+
+        assert response.status_code == 200
+        assert [t.name for t in response.templates][0] == "chains/_transfers_body.html"
+        assert response["HX-Push-Url"].startswith(self.URL + "?")
+        assert response.context["stats"]["count"] == 2
+
+    def test_evidence_page_shows_the_stored_body(self, admin_client, stored):
+        response = admin_client.get(f"/evidence/{stored['raw'].pk}/")
+
+        assert response.status_code == 200
+        assert response.context["evidence"].body_sha256 == stored["raw"].body_sha256

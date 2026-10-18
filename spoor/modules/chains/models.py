@@ -174,6 +174,18 @@ class Transfer(ModelMixin):
         return self.token.to_units(self.amount)
 
     @classmethod
+    def fetch_for_address(cls, address, token, start=None, end=None):
+        """Stored transfers of `token` into or out of `address`, oldest first."""
+        transfers = cls.objects.filter(
+            models.Q(from_address=address) | models.Q(to_address=address), token=token
+        ).select_related("chain", "token", "from_address", "to_address")
+        if start:
+            transfers = transfers.filter(timestamp__gte=start)
+        if end:
+            transfers = transfers.filter(timestamp__lte=end)
+        return transfers.order_by("timestamp", "log_index")
+
+    @classmethod
     def store_records(cls, chain, token, records):
         """Persist TransferRecords; a transfer already stored keeps its original evidence."""
         values = {value for r in records for value in (r.from_address, r.to_address)}

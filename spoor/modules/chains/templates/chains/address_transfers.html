@@ -1,0 +1,12 @@
+{% extends "spoor/base.html" %}
+
+{% block title %}Transfers | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Address transfers</h1>
+  <p class="lede">Token transfers into and out of one address. Fetching stores each transfer with the provider response it came from.</p>
+
+  <div id="transfers">
+    {% include "chains/_transfers_body.html" %}
+  </div>
+{% endblock %}

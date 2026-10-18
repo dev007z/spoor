@@ -1,0 +1,24 @@
+{% extends "spoor/base.html" %}
+
+{% block title %}Evidence | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Provider response</h1>
+  <p class="lede">Stored exactly as received. Recompute the SHA-256 of the body to confirm it is unchanged.</p>
+
+  <section class="panel">
+    <dl class="facts">
+      <dt>Source</dt><dd>{{ evidence.source }}</dd>
+      <dt>Endpoint</dt><dd class="mono">{{ evidence.endpoint }}</dd>
+      <dt>Parameters</dt><dd class="mono">{{ evidence.params }}</dd>
+      <dt>HTTP status</dt><dd>{{ evidence.status_code }}</dd>
+      <dt>Retrieved (UTC)</dt><dd>{{ evidence.retrieved_at|date:"Y-m-d H:i:s" }}</dd>
+      <dt>Body SHA-256</dt><dd class="mono">{{ evidence.body_sha256 }}</dd>
+      <dt>Transfers parsed</dt><dd>{{ evidence.transfers.count }}</dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <pre class="body">{{ pretty_body }}</pre>
+  </section>
+{% endblock %}
