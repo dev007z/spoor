@@ -12,6 +12,9 @@ class TraceRun(ModelMixin):
 
     token = models.ForeignKey(Token, on_delete=models.PROTECT, related_name="trace_runs")
     seeds = models.ManyToManyField(Address, related_name="seeded_trace_runs")
+    seed_tx_hash = models.CharField(
+        max_length=66, blank=True, help_text="Set when the trace starts from a transaction."
+    )
     direction = models.CharField(
         max_length=10, choices=TraceDirection.choices, default=TraceDirection.FORWARD
     )
@@ -38,10 +41,12 @@ class TraceRun(ModelMixin):
         return f"{self.get_direction_display()} trace of {self.token} ({self.status})"
 
     @classmethod
-    def create_run(cls, token, seed, **params):
-        """A pending run seeded from one address (any accepted spelling)."""
-        run = cls.objects.create(token=token, **params)
-        run.seeds.set([Address.resolve(token.chain, seed)])
+    def create_run(cls, token, seed_address=None, seed_tx_hash="", **params):
+        """A pending run seeded from an address, or from a transaction whose transfers the
+        worker resolves into seeds when the run starts."""
+        run = cls.objects.create(token=token, seed_tx_hash=seed_tx_hash, **params)
+        if seed_address:
+            run.seeds.set([Address.resolve(token.chain, seed_address)])
         return run
 
     @classmethod
