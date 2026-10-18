@@ -1,0 +1,44 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format %}
+
+{% block title %}Contracts | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Contracts</h1>
+  <p class="lede">Fetch a token contract's verified source and ABI from Etherscan. Proxies bring their implementation.</p>
+
+  {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+  <form class="panel" method="post" action="{% url 'contracts:contract_list' %}">
+    {% csrf_token %}
+    <div class="form-grid wide">
+      {% for field in form %}
+        <div class="field{% if field.name == 'address' %} span-2{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="field"><button type="submit" class="primary">Fetch contract</button></div>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>Contract</th><th>Chain</th><th>Address</th><th>Verified</th><th>Proxy</th><th>Fetched (UTC)</th></tr></thead>
+      <tbody>
+        {% for contract in contracts %}
+          <tr>
+            <td><a href="{% url 'contracts:contract_detail' contract.pk %}">{{ contract.name|default:"Unverified contract" }}</a></td>
+            <td>{{ contract.chain.name }}</td>
+            <td class="mono" title="{{ contract.address.address }}">{{ contract.address.address|short }}</td>
+            <td>{{ contract.is_verified|yesno:"Yes,No" }}</td>
+            <td>{{ contract.is_proxy|yesno:"Yes,No" }}</td>
+            <td>{{ contract.updated_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="empty">No contracts fetched yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

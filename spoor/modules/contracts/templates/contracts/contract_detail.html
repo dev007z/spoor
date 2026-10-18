@@ -1,0 +1,45 @@
+{% extends "spoor/base.html" %}
+
+{% block title %}{{ contract }} | Spoor{% endblock %}
+
+{% block content %}
+  <h1>{{ contract.name|default:"Unverified contract" }}</h1>
+  <p class="params">
+    <span>{{ contract.chain.name }}</span>
+    <a class="mono" href="{{ explorer_url }}" target="_blank" rel="noopener noreferrer">{{ contract.address.address }}</a>
+    {% if contract.compiler_version %}<span>{{ contract.compiler_version }}</span>{% endif %}
+    <span>Source fetched {{ contract.raw_response.retrieved_at|date:"Y-m-d H:i" }} UTC · <a href="{% url 'chains:evidence' contract.raw_response_id %}">evidence</a></span>
+  </p>
+
+  {% if not contract.is_verified %}
+    <div class="notice warn">Etherscan has no verified source for this contract, so its code cannot be checked. Unverified tokens are a risk signal in themselves.</div>
+  {% endif %}
+  {% if contract.is_proxy %}
+    <div class="notice warn">This is an upgradeable proxy: its behaviour comes from the implementation{% if implementation %} <a href="{% url 'contracts:contract_detail' implementation.pk %}">{{ implementation.name }}</a>{% endif %} (<span class="mono">{{ contract.implementation }}</span>), which the admin can replace.</div>
+  {% endif %}
+
+  {% if functions %}
+    <section class="panel table-wrap">
+      <h2>Functions ({{ functions|length }})</h2>
+      <table>
+        <thead><tr><th>Function</th><th>Inputs</th><th>Kind</th></tr></thead>
+        <tbody>
+          {% for function in functions %}
+            <tr>
+              <td class="mono">{{ function.name }}</td>
+              <td class="mono wrap">{% for input in function.inputs %}{{ input.type }} {{ input.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+              <td>{% if function.stateMutability == "view" or function.stateMutability == "pure" %}Read{% else %}<strong>Changes state</strong>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
+  {% for name, code in contract.source_files.items %}
+    <details class="panel source">
+      <summary class="mono">{{ name }}</summary>
+      <pre class="body">{{ code }}</pre>
+    </details>
+  {% endfor %}
+{% endblock %}

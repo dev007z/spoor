@@ -76,6 +76,9 @@ SPOOR_CHAIN_ADAPTERS = {
     },
 }
 
+# Verified contract source and ABI (free on every chain with one key).
+ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")
+
 if env_bool("HTTPS"):
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True

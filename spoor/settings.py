@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "spoor.modules.screening",
     "spoor.modules.tracing",
     "spoor.modules.reports",
+    "spoor.modules.contracts",
 ]
 
 MIDDLEWARE = [
