@@ -198,3 +198,4 @@ a.button.primary { background: var(--accent); border: 1px solid var(--accent); c
 #graph-panel .notes li p { margin: 2px 0 0; white-space: pre-wrap; }
 #graph-panel .notes textarea { width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
 #graph-panel > button { margin-top: 12px; }
+.pager { display: flex; gap: 16px; justify-content: center; padding-top: 12px; color: var(--muted); }

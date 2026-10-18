@@ -1,0 +1,57 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format %}
+
+{% block title %}Labels | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Labels</h1>
+  <p class="lede">Sourced claims about who controls an address. Entities only; every label links to its public source.</p>
+
+  <section class="stats">
+    {% for dataset in datasets %}
+      <div class="stat" title="{{ dataset.description }}"><div class="label">{{ dataset.name }}</div><div class="value">{{ dataset.count }}</div></div>
+    {% empty %}
+      <div class="stat"><div class="label">No datasets loaded</div><div class="value lede">Run <span class="mono">import_ofac</span></div></div>
+    {% endfor %}
+  </section>
+
+  <form class="panel" method="get" action="{% url 'labels:label_list' %}">
+    <div class="form-grid wide">
+      {% for field in form %}
+        <div class="field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+        </div>
+      {% endfor %}
+      <div class="field"><button type="submit" class="primary">Filter</button></div>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead><tr><th>Address</th><th>Chain</th><th>Entity</th><th>Category</th><th>Confidence</th><th>Dataset</th><th>Source</th></tr></thead>
+      <tbody>
+        {% for label in page %}
+          <tr>
+            <td class="mono" title="{{ label.address.address }}"><a href="{{ label.address.chain|address_url:label.address.address }}" target="_blank" rel="noopener noreferrer">{{ label.address.address|short:8 }}</a></td>
+            <td>{{ label.address.chain.name }}</td>
+            <td class="wrap">{{ label.entity }}</td>
+            <td><span class="badge label">{{ label.get_category_display }}</span></td>
+            <td>{{ label.get_confidence_display }}</td>
+            <td>{{ label.dataset.name }}</td>
+            <td><a href="{{ label.source_url }}" target="_blank" rel="noopener noreferrer">Source</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No labels match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if page.has_other_pages %}
+      <nav class="pager">
+        {% if page.has_previous %}<a href="?{{ query }}&page={{ page.previous_page_number }}">Previous</a>{% endif %}
+        <span>Page {{ page.number }} of {{ page.paginator.num_pages }} ({{ page.paginator.count }} labels)</span>
+        {% if page.has_next %}<a href="?{{ query }}&page={{ page.next_page_number }}">Next</a>{% endif %}
+      </nav>
+    {% endif %}
+  </section>
+{% endblock %}

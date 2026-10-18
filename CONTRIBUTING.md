@@ -38,6 +38,38 @@ Labels say who is behind an address, so they carry real consequences when wrong.
 
 Maintainers will close label pull requests that do not meet this policy.
 
+Official sanctions lists are the one place a person's name can appear: Spoor imports the OFAC SDN list as published, because those designations are made public by a government. That does not extend to contributed labels.
+
+### Dataset files
+
+Contributed labels live in JSON files under `spoor/modules/labels/data/`, one dataset per file:
+
+```json
+{
+  "key": "example-exchanges",
+  "name": "Example exchanges",
+  "description": "Where these labels come from.",
+  "labels": [
+    {
+      "chain": "tron",
+      "address": "T...",
+      "entity": "Example Exchange",
+      "category": "exchange",
+      "confidence": "high",
+      "source_url": "https://example.com/proof-of-reserves"
+    }
+  ]
+}
+```
+
+`chain` is `tron`, `bsc` or `ethereum`; `category` is one of `exchange`, `bridge`, `mixer`, `sanctioned`, `scam`, `protocol`, `other`; `confidence` is `high`, `medium` or `low`; `source_url` must be an `https` link. Check a file with:
+
+```bash
+uv run python manage.py load_labels spoor/modules/labels/data/your-file.json
+```
+
+A file with any invalid entry is rejected as a whole.
+
 ## Read-only rule
 
 Spoor never signs or sends transactions and never handles private keys. Pull requests that add any write path to a chain will not be accepted.

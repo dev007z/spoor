@@ -34,3 +34,9 @@ def amount(value):
     fraction = fraction.rstrip("0")
     grouped = f"{int(whole):,}"
     return f"{grouped}.{fraction}" if fraction else grouped
+
+
+@register.filter
+def address_url(chain, address):
+    """Explorer link for an address on a chain: {{ chain|address_url:address }}."""
+    return chain.address_url(address)

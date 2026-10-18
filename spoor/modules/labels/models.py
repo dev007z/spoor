@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 
 from spoor.common.mixins import ModelMixin
 from spoor.modules.chains.models import Address
@@ -18,6 +18,34 @@ class LabelDataset(ModelMixin):
     def __str__(self):
         return self.name
 
+    @classmethod
+    def sync(cls, key, name, entries, description="", visibility=DatasetVisibility.PUBLIC):
+        """Make the dataset hold exactly `entries`, adding, updating and removing labels.
+
+        Each entry is a dict with chain (a Chain), address (canonical), entity, category,
+        confidence and source_url. Re-running with the same entries changes nothing.
+        """
+        with transaction.atomic():
+            dataset, _ = cls.objects.update_or_create(
+                key=key,
+                defaults={"name": name, "description": description, "visibility": visibility},
+            )
+            wanted = {}
+            for entry in entries:
+                address = Address.resolve(entry["chain"], entry["address"])
+                wanted[address.id] = entry
+            dataset.labels.exclude(address_id__in=wanted).delete()
+            for address_id, entry in wanted.items():
+                Label.objects.update_or_create(
+                    dataset=dataset,
+                    address_id=address_id,
+                    defaults={
+                        field: entry[field]
+                        for field in ("entity", "category", "confidence", "source_url")
+                    },
+                )
+        return dataset, len(wanted)
+
 
 class Label(ModelMixin):
     """A sourced claim that an address belongs to an entity. Entities only, never individuals."""
@@ -36,6 +64,14 @@ class Label(ModelMixin):
 
     def __str__(self):
         return f"{self.entity} ({self.category})"
+
+    @classmethod
+    def fetch_labels(cls, conditions):
+        return (
+            cls.objects.filter(conditions)
+            .select_related("dataset", "address__chain")
+            .order_by("dataset__name", "entity", "address__address")
+        )
 
     @classmethod
     def best_for_addresses(cls, address_ids):

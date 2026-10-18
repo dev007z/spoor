@@ -32,6 +32,12 @@ In a second terminal, create your login:
 docker compose exec web python manage.py createsuperuser
 ```
 
+Load the OFAC sanctions list as labels (re-run it to pick up OFAC updates):
+
+```bash
+docker compose exec web python manage.py import_ofac
+```
+
 Open http://localhost:8000.
 
 ## Development
