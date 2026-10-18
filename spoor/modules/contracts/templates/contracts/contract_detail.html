@@ -1,4 +1,5 @@
 {% extends "spoor/base.html" %}
+{% load spoor_format %}
 
 {% block title %}{{ contract }} | Spoor{% endblock %}
 
@@ -16,6 +17,30 @@
   {% endif %}
   {% if contract.is_proxy %}
     <div class="notice warn">This is an upgradeable proxy: its behaviour comes from the implementation{% if implementation %} <a href="{% url 'contracts:contract_detail' implementation.pk %}">{{ implementation.name }}</a>{% endif %} (<span class="mono">{{ contract.implementation }}</span>), which the admin can replace.</div>
+  {% endif %}
+
+  {% if contract.is_verified or implementation %}
+    <section class="panel">
+      <h2>Findings</h2>
+      {% for finding in analysis.findings %}
+        <article class="finding {{ finding.severity }}">
+          <header><span class="badge sev-{{ finding.severity }}">{{ finding.severity|capfirst }}</span> <strong>{{ finding.title }}</strong></header>
+          <p>{{ finding.explanation }}</p>
+          {% if finding.evidence %}
+            <ul class="evidence">
+              {% for item in finding.evidence %}<li><span class="lede mono" title="{{ item.file }}">{{ item.file|tail_path }}:{{ item.line }}</span> <code>{{ item.code }}</code></li>{% endfor %}
+            </ul>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p class="lede">No owner powers found by the static checks. That is not a safety guarantee: checks read code patterns and can miss unusual designs.</p>
+      {% endfor %}
+      {% if analysis.ownership and analysis.ownership.error %}
+        <p class="notice warn">Could not read owner() live: {{ analysis.ownership.error }}</p>
+      {% elif analysis.ownership %}
+        <p class="lede">owner() read live at {{ analysis.ownership.raw_response.retrieved_at|date:"Y-m-d H:i:s" }} UTC · <a href="{% url 'chains:evidence' analysis.ownership.raw_response.pk %}">evidence</a></p>
+      {% endif %}
+    </section>
   {% endif %}
 
   {% if functions %}

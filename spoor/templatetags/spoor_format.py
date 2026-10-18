@@ -47,3 +47,9 @@ def address_url(chain, address):
 def as_json(value):
     """Compact, key-sorted JSON, as stored request parameters should be cited."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+@register.filter
+def tail_path(path, parts=2):
+    """The last few segments of a long source path: contracts/v1/FiatTokenV1.sol."""
+    return "/".join(str(path).split("/")[-int(parts) :])

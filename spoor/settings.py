@@ -75,6 +75,16 @@ SPOOR_HEURISTICS = [
     "spoor.modules.tracing.heuristics.CollectionWallet",
 ]
 
+# Static checks run on every analyzed contract (see spoor.modules.contracts.checks).
+SPOOR_CONTRACT_CHECKS = [
+    "spoor.modules.contracts.checks.PrivilegedMint",
+    "spoor.modules.contracts.checks.TransferBlocklist",
+    "spoor.modules.contracts.checks.ModifiableFees",
+    "spoor.modules.contracts.checks.TradingControls",
+    "spoor.modules.contracts.checks.Upgradeable",
+    "spoor.modules.contracts.checks.HiddenOwnership",
+]
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",

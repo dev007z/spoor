@@ -202,3 +202,12 @@ a.button.primary { background: var(--accent); border: 1px solid var(--accent); c
 #graph-panel > button { margin-top: 12px; }
 .pager { display: flex; gap: 16px; justify-content: center; padding-top: 12px; color: var(--muted); }
 .source summary { cursor: pointer; } .source pre { margin: 10px 0 0; }
+
+.finding { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.finding:last-of-type { border-bottom: 0; }
+.finding p { margin: 4px 0; }
+.finding .evidence { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.finding code { font-family: var(--mono); font-size: 12px; }
+.badge.sev-high { color: var(--out); border-color: currentColor; }
+.badge.sev-medium { color: var(--warn-text); border-color: currentColor; }
+.badge.sev-low, .badge.sev-info { color: var(--muted); }
