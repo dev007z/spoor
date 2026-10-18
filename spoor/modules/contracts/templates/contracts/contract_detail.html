@@ -43,6 +43,68 @@
     </section>
   {% endif %}
 
+  <section class="panel">
+    <h2>Deployer and owner</h2>
+    <dl class="facts">
+      <dt>Deployer</dt>
+      <dd>{% if contract.deployer %}<a class="mono" href="{{ contract.chain|address_url:contract.deployer }}" target="_blank" rel="noopener noreferrer">{{ contract.deployer }}</a>{% if contract.creation_tx %} · <a href="{{ contract.chain|tx_url:contract.creation_tx }}" target="_blank" rel="noopener noreferrer">creation tx</a>{% endif %}{% else %}<span class="lede">Unknown. {{ contract.deployer_note }}</span>{% endif %}</dd>
+      <dt>Owner</dt>
+      <dd>{% if analysis.ownership.owner %}<a class="mono" href="{{ contract.chain|address_url:analysis.ownership.owner }}" target="_blank" rel="noopener noreferrer">{{ analysis.ownership.owner }}</a>{% if analysis.ownership.renounced %} (renounced){% endif %}{% elif analysis.ownership.error %}<span class="lede">Could not read: {{ analysis.ownership.error }}</span>{% else %}<span class="lede">No owner() function</span>{% endif %}</dd>
+    </dl>
+  </section>
+
+  {% if analysis.liquidity %}
+    <section class="panel table-wrap">
+      <h2>Supply and liquidity ({{ analysis.liquidity.dex }})</h2>
+      {% if analysis.liquidity.error %}
+        <p class="notice warn">Could not read supply and liquidity: {{ analysis.liquidity.error }}</p>
+      {% else %}
+        <table>
+          <thead><tr><th>Holder</th><th>Address</th><th class="num">Share of supply</th></tr></thead>
+          <tbody>
+            {% for holding in analysis.liquidity.holdings %}
+              <tr><td>{{ holding.role }}</td><td class="mono" title="{{ holding.address }}">{{ holding.address|short }}</td><td class="num">{{ holding.share }}%</td></tr>
+            {% empty %}
+              <tr><td colspan="3" class="empty">No deployer or owner wallet known.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <table>
+          <thead><tr><th>Pool</th><th>Pair</th><th class="num">Burned</th><th class="num">Deployer / owner</th><th class="num">Held by others</th></tr></thead>
+          <tbody>
+            {% for pool in analysis.liquidity.pools %}
+              <tr>
+                <td>{{ contract.name }}/{{ pool.quote }}</td>
+                <td class="mono"><a href="{{ contract.chain|address_url:pool.pair }}" target="_blank" rel="noopener noreferrer">{{ pool.pair|short }}</a></td>
+                <td class="num">{{ pool.burned }}%</td>
+                <td class="num">{% for holding in pool.held %}{{ holding.share }}%{% if not forloop.last %} / {% endif %}{% empty %}n/a{% endfor %}</td>
+                <td class="num" title="Includes locker contracts, which are not identified">{{ pool.others }}%</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="empty">No pool with the main quote tokens.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <form class="panel" method="post" action="{% url 'contracts:trace_deployer' contract.pk %}">
+    {% csrf_token %}
+    <h2>Trace the deployer</h2>
+    <p class="lede">Follow funds out of the deployer and owner wallets{% if controllers %} ({% for address, role in controllers.items %}{{ role|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}, plus any wallets you add.</p>
+    <div class="form-grid wide">
+      {% for field in trace_form %}
+        <div class="field{% if field.name == 'extra_wallets' %} span-2{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="field"><button type="submit" class="primary">Start trace</button></div>
+    </div>
+  </form>
+
   {% if functions %}
     <section class="panel table-wrap">
       <h2>Functions ({{ functions|length }})</h2>
