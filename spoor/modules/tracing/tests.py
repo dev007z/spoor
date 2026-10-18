@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from django.test import Client
 
 from spoor.modules.chains.adapters.base import FetchResult, ProviderError, TransferRecord
 from spoor.modules.chains.models import Address, RawResponse, Token
@@ -318,3 +319,79 @@ class TestTraceGraph:
 
         assert response.status_code == 403
         assert response.json()["status"] is False
+
+
+@pytest.mark.django_db
+class TestManualExpansion:
+    def test_expanding_a_hop_limited_node_follows_it(self, usdt):
+        edges = [("a", "b", 100, 1), ("b", "c", 100, 2), ("c", "d", 100, 3)]
+        run, _ = trace(usdt, edges, max_hops=1)
+        stopped = node(run, "b")
+        assert stopped.stop_reason == StopReason.MAX_HOPS
+
+        TraceEngine(run, GraphAdapter(edges)).execute(from_node=stopped)
+
+        run.refresh_from_db()
+        assert node(run, "b").expanded
+        assert node_hops(run) == {"a": 0, "b": 1, "c": 2}
+        assert node(run, "c").stop_reason == StopReason.MAX_HOPS  # normal rules resume
+        assert run.status == TraceStatus.COMPLETED
+
+    def test_expanding_a_labeled_endpoint_overrides_the_stop_once(self, usdt):
+        dataset = LabelDataset.objects.create(key="test", name="Test")
+        for name in ("b", "c"):
+            Label.objects.create(
+                dataset=dataset,
+                address=Address.resolve(usdt.chain, addr(name)),
+                entity=f"Exchange {name}",
+                category=LabelCategory.EXCHANGE,
+                confidence=LabelConfidence.HIGH,
+                source_url="https://example.test",
+            )
+        edges = [("a", "b", 100, 1), ("b", "c", 100, 2), ("c", "d", 100, 3)]
+        run, _ = trace(usdt, edges)
+
+        TraceEngine(run, GraphAdapter(edges)).execute(from_node=node(run, "b"))
+
+        assert node(run, "c").stop_reason == StopReason.LABELED_ENDPOINT
+        assert "d" not in node_hops(run)
+
+    def expand_url(self, run, name):
+        return f"/api/v1/traces/{run.pk}/nodes/{node(run, name).pk}/expand/"
+
+    def test_api_queues_the_expansion(
+        self, admin_client, usdt, monkeypatch, django_capture_on_commit_callbacks
+    ):
+        queued = []
+        monkeypatch.setattr("spoor.modules.tracing.api.expand_node.delay", queued.append)
+        run, _ = trace(usdt, [("a", "b", 1, 1), ("b", "c", 1, 2)], max_hops=1)
+
+        with django_capture_on_commit_callbacks(execute=True):
+            response = admin_client.post(self.expand_url(run, "b"))
+
+        run.refresh_from_db()
+        assert response.status_code == 202
+        assert queued == [str(node(run, "b").pk)]
+        assert run.status == TraceStatus.PENDING
+
+    def test_api_refuses_while_running_or_already_expanded(self, admin_client, usdt):
+        run, _ = trace(usdt, [("a", "b", 1, 1)])
+
+        expanded = admin_client.post(self.expand_url(run, "a"))
+        run.mark_running()
+        running = admin_client.post(self.expand_url(run, "b"))
+
+        assert expanded.status_code == 409
+        assert expanded.json()["error_code"] == "already_expanded"
+        assert running.status_code == 409
+        assert running.json()["error_code"] == "trace_running"
+
+    def test_api_requires_csrf_for_session_users(self, usdt, django_user_model):
+        user = django_user_model.objects.create_user("analyst", password="pw-for-tests")
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(user)
+        run, _ = trace(usdt, [("a", "b", 1, 1)], max_hops=0)
+
+        response = csrf_client.post(self.expand_url(run, "a"))
+
+        assert response.status_code == 403
