@@ -18,10 +18,12 @@
         {% url 'chains:address_transfers' as transfers_url %}
         {% url 'labels:label_list' as labels_url %}
         {% url 'screening:screen' as screening_url %}
+        {% url 'contracts:contract_list' as contracts_url %}
         <a href="{{ cases_url }}" {% if request.path|slice:":7" == "/cases/" %}aria-current="page"{% endif %}>Cases</a>
         <a href="{{ traces_url }}" {% if request.path|slice:":8" == "/traces/" %}aria-current="page"{% endif %}>Traces</a>
         <a href="{{ transfers_url }}" {% if request.path == transfers_url %}aria-current="page"{% endif %}>Transfers</a>
         <a href="{{ screening_url }}" {% if request.path == screening_url %}aria-current="page"{% endif %}>Screening</a>
+        <a href="{{ contracts_url }}" {% if request.path|slice:":11" == "/contracts/" %}aria-current="page"{% endif %}>Contracts</a>
         <a href="{{ labels_url }}" {% if request.path == labels_url %}aria-current="page"{% endif %}>Labels</a>
         {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
       </nav>

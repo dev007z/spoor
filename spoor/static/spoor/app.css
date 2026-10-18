@@ -67,14 +67,15 @@ a { color: var(--accent); }
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 8px 24px;
   padding: 12px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .topbar .brand { font-weight: 700; letter-spacing: 0.02em; color: var(--text); text-decoration: none; }
-.topbar nav { display: flex; gap: 16px; flex: 1; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 6px 16px; flex: 1; }
 .topbar nav a { color: var(--muted); text-decoration: none; }
 .topbar nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
 .topbar form { margin: 0; display: flex; align-items: center; gap: 10px; color: var(--muted); }
@@ -200,3 +201,4 @@ a.button.primary { background: var(--accent); border: 1px solid var(--accent); c
 #graph-panel .notes textarea { width: 100%; margin-bottom: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
 #graph-panel > button { margin-top: 12px; }
 .pager { display: flex; gap: 16px; justify-content: center; padding-top: 12px; color: var(--muted); }
+.source summary { cursor: pointer; } .source pre { margin: 10px 0 0; }
