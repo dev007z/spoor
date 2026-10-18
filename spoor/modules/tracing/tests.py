@@ -3,6 +3,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from django.test import Client
 
+from spoor.modules.cases.enums import CaseEventType, CaseType
+from spoor.modules.cases.models import Case
 from spoor.modules.chains.adapters.base import FetchResult, ProviderError, TransferRecord
 from spoor.modules.chains.models import Address, RawResponse, Token
 from spoor.modules.labels.enums import LabelCategory, LabelConfidence
@@ -298,6 +300,27 @@ class TestTracePages:
         assert run.min_amount == 1_500_000_000_000_000_000  # 1.5 USDT at 18 decimals
         assert [seed.address for seed in run.seeds.all()] == [addr("a")]
 
+    def test_starting_a_trace_in_a_case_records_it_in_the_case(
+        self, admin_client, admin_user, usdt, monkeypatch
+    ):
+        monkeypatch.setattr("spoor.modules.tracing.views.run_trace.delay", lambda run_id: None)
+        case = Case.create_case(admin_user, name="Case", case_type=CaseType.OTHER)
+
+        admin_client.post("/traces/", self.form_data(usdt, case=case.pk))
+
+        run = TraceRun.objects.get()
+        assert run.case == case
+        assert run.created_by == admin_user
+        started = case.events.get(event_type=CaseEventType.TRACE_STARTED)
+        assert started.details == {"trace_run": str(run.pk)}
+
+    def test_case_is_preselected_when_starting_from_a_case(self, admin_client, admin_user):
+        case = Case.create_case(admin_user, name="Case", case_type=CaseType.OTHER)
+
+        response = admin_client.get(f"/traces/?case={case.pk}")
+
+        assert response.context["form"].initial["case"] == str(case.pk)
+
     def test_a_transaction_hash_seeds_from_that_transaction(
         self, admin_client, usdt, monkeypatch, django_capture_on_commit_callbacks
     ):
@@ -431,6 +454,16 @@ class TestManualExpansion:
         assert response.status_code == 202
         assert queued == [str(node(run, "b").pk)]
         assert run.status == TraceStatus.PENDING
+
+    def test_expanding_inside_a_case_records_it(self, admin_client, admin_user, usdt, monkeypatch):
+        monkeypatch.setattr("spoor.modules.tracing.api.expand_node.delay", lambda node_id: None)
+        case = Case.create_case(admin_user, name="Case", case_type=CaseType.OTHER)
+        run, _ = trace(usdt, [("a", "b", 1, 1), ("b", "c", 1, 2)], max_hops=1, case=case)
+
+        admin_client.post(self.expand_url(run, "b"))
+
+        expanded = case.events.get(event_type=CaseEventType.TRACE_EXPANDED)
+        assert expanded.details["address"] == addr("b")
 
     def test_api_refuses_while_running_or_already_expanded(self, admin_client, usdt):
         run, _ = trace(usdt, [("a", "b", 1, 1)])
