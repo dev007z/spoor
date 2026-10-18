@@ -1,0 +1,70 @@
+{% load spoor_format %}
+<form class="panel" method="post" action="{% url 'chains:address_transfers' %}"
+      hx-post="{% url 'chains:address_transfers' %}" hx-target="#transfers"
+      hx-disabled-elt="find button" hx-indicator="#fetching">
+  {% csrf_token %}
+  <div class="form-grid">
+    {% for field in form %}
+      <div class="field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <div class="field">
+      <button type="submit" class="primary">Fetch from chain</button>
+    </div>
+  </div>
+  <p id="fetching" class="htmx-indicator lede">Fetching from the provider. Keyless TronGrid allows about one request per second, so this can take a while.</p>
+</form>
+
+{% if fetch_error %}
+  <div class="notice error">The provider request failed: {{ fetch_error }}</div>
+{% elif fetch_complete is False %}
+  <div class="notice warn">Stopped after {{ fetched }} transfers. The window holds more; narrow it to see everything.</div>
+{% endif %}
+
+{% if rows is not None %}
+  <section class="stats">
+    <div class="stat"><div class="label">Transfers</div><div class="value">{{ stats.count }}</div></div>
+    <div class="stat"><div class="label">Received</div><div class="value dir-in">{{ stats.total_in|units }} {{ token.symbol }}</div></div>
+    <div class="stat"><div class="label">Sent</div><div class="value dir-out">{{ stats.total_out|units }} {{ token.symbol }}</div></div>
+    <div class="stat"><div class="label">Counterparties</div><div class="value">{{ stats.counterparties }}</div></div>
+  </section>
+
+  <section class="panel table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Direction</th>
+          <th>Counterparty</th>
+          <th class="num">Amount</th>
+          <th>Transaction</th>
+          <th>Block</th>
+          <th>Evidence</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>{{ row.transfer.timestamp|date:"Y-m-d H:i:s" }}</td>
+            <td>{% if row.incoming %}<span class="dir-in">In</span>{% else %}<span class="dir-out">Out</span>{% endif %}</td>
+            <td class="mono" title="{{ row.counterparty }}">
+              <a href="{{ row.counterparty_url }}" target="_blank" rel="noopener noreferrer">{{ row.counterparty|short }}</a>
+            </td>
+            <td class="num">{{ row.transfer.amount_units|units }} {{ token.symbol }}</td>
+            <td class="mono" title="{{ row.transfer.tx_hash }}">
+              <a href="{{ row.tx_url }}" target="_blank" rel="noopener noreferrer">{{ row.transfer.tx_hash|short }}</a>
+              <span class="lede">#{{ row.transfer.log_index }}</span>
+            </td>
+            <td class="mono">{{ row.transfer.block_number }}</td>
+            <td><a href="{% url 'chains:evidence' row.transfer.raw_response_id %}">Response</a></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty">No stored transfers for this address and window yet. Use "Fetch from chain".</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
