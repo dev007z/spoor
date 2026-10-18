@@ -3,6 +3,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from spoor.common.functions import to_units
+from spoor.modules.cases.enums import CaseEventType
+from spoor.modules.cases.models import CaseEvent
 from spoor.modules.tracing.enums import StopReason
 from spoor.modules.tracing.forms import StartTraceForm
 from spoor.modules.tracing.models import TraceRun
@@ -15,7 +17,7 @@ class TraceListView(View):
     template_name = "tracing/trace_list.html"
 
     def get(self, request):
-        return self.render(request, StartTraceForm())
+        return self.render(request, StartTraceForm(initial={"case": request.GET.get("case")}))
 
     def post(self, request):
         form = StartTraceForm(request.POST)
@@ -25,6 +27,8 @@ class TraceListView(View):
         data = form.cleaned_data
         run = TraceRun.create_run(
             data["token"],
+            case=data["case"],
+            created_by=request.user,
             seed_address=data["address"],
             seed_tx_hash=data["seed_tx_hash"],
             direction=data["direction"],
@@ -34,6 +38,14 @@ class TraceListView(View):
             fan_out=data["fan_out"],
             min_amount=data["min_amount_raw"],
         )
+        if run.case:
+            CaseEvent.record(
+                run.case,
+                request.user,
+                CaseEventType.TRACE_STARTED,
+                f"Started a {run.direction} {run.token.symbol} trace on {run.chain.name}.",
+                trace_run=str(run.pk),
+            )
         transaction.on_commit(lambda: run_trace.delay(str(run.pk)))
         return redirect("tracing:trace_detail", pk=run.pk)
 
@@ -49,7 +61,7 @@ class TraceDetailView(View):
     body_template_name = "tracing/_trace_body.html"
 
     def get(self, request, pk):
-        run = get_object_or_404(TraceRun.objects.select_related("token__chain"), pk=pk)
+        run = get_object_or_404(TraceRun.objects.select_related("token__chain", "case"), pk=pk)
         template = self.body_template_name if request.headers.get("HX-Request") else None
         return render(request, template or self.template_name, trace_context(run))
 

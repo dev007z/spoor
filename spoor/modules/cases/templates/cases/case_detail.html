@@ -1,0 +1,52 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format %}
+
+{% block title %}{{ case.name }} | Spoor{% endblock %}
+
+{% block content %}
+  <h1>{{ case.name }}</h1>
+  <p class="params">
+    <span><strong>{{ case.get_case_type_display }}</strong></span>
+    <span>Opened by <strong>{{ case.created_by.get_username }}</strong> on {{ case.created_at|date:"Y-m-d H:i" }} UTC</span>
+  </p>
+  {% if case.description %}<section class="panel"><p class="case-summary">{{ case.description|linebreaksbr }}</p></section>{% endif %}
+
+  <section class="panel table-wrap">
+    <div class="section-head">
+      <h2>Traces</h2>
+      <a class="button primary" href="{% url 'tracing:trace_list' %}?case={{ case.pk }}">Start a trace in this case</a>
+    </div>
+    <table>
+      <thead><tr><th>Started</th><th>Token</th><th>Seed</th><th>Direction</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for run in runs %}
+          <tr>
+            <td><a href="{% url 'tracing:trace_detail' run.pk %}">{{ run.created_at|date:"Y-m-d H:i" }}</a></td>
+            <td>{{ run.token.symbol }} on {{ run.token.chain.name }}</td>
+            <td class="mono">
+              {% if run.seed_tx_hash %}<span title="{{ run.seed_tx_hash }}">tx {{ run.seed_tx_hash|short }}</span>
+              {% else %}{% for seed in run.seeds.all %}<span title="{{ seed.address }}">{{ seed.address|short }}</span>{% endfor %}{% endif %}
+            </td>
+            <td>{{ run.direction|capfirst }}</td>
+            <td><span class="badge {{ run.status }}">{{ run.get_status_display }}</span></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No traces in this case yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Activity</h2>
+    <ol class="timeline">
+      {% for event in events %}
+        <li>
+          <time datetime="{{ event.created_at|date:'c' }}">{{ event.created_at|date:"Y-m-d H:i:s" }}</time>
+          <strong>{{ event.actor.get_username }}</strong>
+          <span>{{ event.summary }}</span>
+        </li>
+      {% endfor %}
+    </ol>
+  </section>
+{% endblock %}

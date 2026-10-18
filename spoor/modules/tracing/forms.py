@@ -3,6 +3,7 @@ from decimal import Decimal
 from django import forms
 
 from spoor.common.functions import to_raw
+from spoor.modules.cases.models import Case
 from spoor.modules.chains.addresses import is_tx_hash
 from spoor.modules.chains.forms import AddressTransfersForm
 from spoor.modules.tracing.enums import TraceDirection
@@ -11,6 +12,9 @@ from spoor.modules.tracing.enums import TraceDirection
 class StartTraceForm(AddressTransfersForm):
     """The address-and-window form plus the trace parameters."""
 
+    case = forms.ModelChoiceField(
+        queryset=Case.objects.order_by("-created_at"), required=False, empty_label="No case"
+    )
     direction = forms.ChoiceField(choices=TraceDirection.choices, initial=TraceDirection.FORWARD)
     max_hops = forms.IntegerField(min_value=1, max_value=10, initial=3)
     fan_out = forms.IntegerField(

@@ -6,6 +6,7 @@
 {% block content %}
   <h1>{{ run.get_direction_display }}</h1>
   <p class="params">
+    {% if run.case %}<span>Case <a href="{% url 'cases:case_detail' run.case.pk %}">{{ run.case.name }}</a></span>{% endif %}
     <span><strong>{{ run.token.symbol }}</strong> on {{ run.chain.name }}</span>
     {% if run.seed_tx_hash %}
       <span>Seed transaction <a class="mono" href="{{ seed_tx_url }}" target="_blank" rel="noopener noreferrer" title="{{ run.seed_tx_hash }}">{{ run.seed_tx_hash|short }}</a></span>

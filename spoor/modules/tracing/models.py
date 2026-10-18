@@ -1,7 +1,9 @@
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
 from spoor.common.mixins import ModelMixin
+from spoor.modules.cases.models import Case
 from spoor.modules.chains.models import Address, Token, Transfer
 from spoor.modules.labels.models import Label
 from spoor.modules.tracing.enums import StopReason, TraceDirection, TraceStatus
@@ -10,6 +12,16 @@ from spoor.modules.tracing.enums import StopReason, TraceDirection, TraceStatus
 class TraceRun(ModelMixin):
     """One breadth-first trace: its parameters, its progress, and the graph it produced."""
 
+    case = models.ForeignKey(
+        Case, on_delete=models.PROTECT, null=True, blank=True, related_name="trace_runs"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="trace_runs",
+    )
     token = models.ForeignKey(Token, on_delete=models.PROTECT, related_name="trace_runs")
     seeds = models.ManyToManyField(Address, related_name="seeded_trace_runs")
     seed_tx_hash = models.CharField(
@@ -52,7 +64,7 @@ class TraceRun(ModelMixin):
     @classmethod
     def fetch_runs(cls):
         return (
-            cls.objects.select_related("token__chain")
+            cls.objects.select_related("token__chain", "case")
             .prefetch_related("seeds")
             .annotate(node_count=models.Count("nodes", distinct=True))
             .annotate(edge_count=models.Count("edges", distinct=True))
