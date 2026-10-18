@@ -42,3 +42,27 @@ class TestLabels:
         self.make_label(second, address)
 
         assert address.labels.count() == 2
+
+    def test_best_label_prefers_higher_confidence(self, address):
+        weak = LabelDataset.objects.create(key="weak", name="Weak")
+        strong = LabelDataset.objects.create(key="strong", name="Strong")
+        Label.objects.create(
+            dataset=weak,
+            address=address,
+            entity="Guess",
+            category=LabelCategory.OTHER,
+            confidence=LabelConfidence.LOW,
+            source_url="https://example.test/a",
+        )
+        Label.objects.create(
+            dataset=strong,
+            address=address,
+            entity="Known Exchange",
+            category=LabelCategory.EXCHANGE,
+            confidence=LabelConfidence.HIGH,
+            source_url="https://example.test/b",
+        )
+
+        best = Label.best_for_addresses([address.id])
+
+        assert best[address.id].entity == "Known Exchange"

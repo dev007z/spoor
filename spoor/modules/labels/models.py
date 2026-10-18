@@ -36,3 +36,14 @@ class Label(ModelMixin):
 
     def __str__(self):
         return f"{self.entity} ({self.category})"
+
+    @classmethod
+    def best_for_addresses(cls, address_ids):
+        """{address_id: label} keeping the highest-confidence label when datasets overlap."""
+        rank = {LabelConfidence.HIGH: 0, LabelConfidence.MEDIUM: 1, LabelConfidence.LOW: 2}
+        best = {}
+        for label in cls.objects.filter(address_id__in=address_ids).select_related("dataset"):
+            current = best.get(label.address_id)
+            if current is None or rank[label.confidence] < rank[current.confidence]:
+                best[label.address_id] = label
+        return best

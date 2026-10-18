@@ -11,6 +11,10 @@ class LabelCategory(models.TextChoices):
     OTHER = "other", "Other"
 
 
+# Funds reaching these entities leave the traceable on-chain path, so a trace stops there.
+TERMINAL_CATEGORIES = frozenset({LabelCategory.EXCHANGE, LabelCategory.BRIDGE, LabelCategory.MIXER})
+
+
 class LabelConfidence(models.TextChoices):
     HIGH = "high", "High"
     MEDIUM = "medium", "Medium"
