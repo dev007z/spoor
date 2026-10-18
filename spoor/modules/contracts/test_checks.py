@@ -178,3 +178,90 @@ def test_rpc_client_refuses_anything_but_reads():
         with pytest.raises(ForbiddenMethodError):
             adapter.call(method, [], cacheable=False)
     assert calls == []
+
+
+class FakeTokenNode:
+    """A node that answers totalSupply, balanceOf, getPair and owner like real contracts."""
+
+    def __init__(self, supplies, balances, pairs, owner):
+        self.supplies, self.balances, self.pairs, self.owner = supplies, balances, pairs, owner
+
+    @staticmethod
+    def word(value):
+        return "0x" + format(value, "064x")
+
+    def __call__(self, request):
+        call = json.loads(request.content)["params"][0]
+        to, data = call["to"].lower(), call["data"]
+        selector, args = data[:10], data[10:]
+        if selector == "0x18160ddd":
+            result = self.word(self.supplies[to])
+        elif selector == "0x70a08231":
+            result = self.word(self.balances.get((to, "0x" + args[24:64]), 0))
+        elif selector == "0xe6a43905":
+            pair = self.pairs.get(("0x" + args[24:64], "0x" + args[88:128]), "0x" + "0" * 40)
+            result = "0x" + pair[2:].rjust(64, "0")
+        elif selector == "0x8da5cb5b":
+            result = "0x" + self.owner[2:].rjust(64, "0")
+        else:
+            raise AssertionError(selector)
+        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result})
+
+
+@pytest.mark.django_db
+class TestLiquidity:
+    TOKEN = "0x" + "11" * 20
+    PAIR = "0x" + "22" * 20
+    DEPLOYER = "0x" + "33" * 20
+    WBNB = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
+
+    def analyze(self, token_balances, lp_balances, owner=None):
+        contract = contract_with(
+            MINTABLE_BODY,
+            deployer=self.DEPLOYER,
+            abi=[{"type": "function", "name": "owner", "inputs": [], "stateMutability": "view"}],
+        )
+        contract.address.address = self.TOKEN
+        contract.address.save()
+        node = FakeTokenNode(
+            supplies={self.TOKEN: 1000, self.PAIR: 100},
+            balances={
+                **{(self.TOKEN, holder): amount for holder, amount in token_balances.items()},
+                **{(self.PAIR, holder): amount for holder, amount in lp_balances.items()},
+            },
+            pairs={(self.TOKEN, self.WBNB): self.PAIR},
+            owner=owner or self.DEPLOYER,
+        )
+        adapter = JsonRpcAdapter(
+            Chain.get_chain(key="bsc"),
+            transport=httpx.MockTransport(node),
+            rpc_url="https://rpc.test/",
+            min_interval=0,
+        )
+        return analyze_contract(contract, adapter=adapter)
+
+    def test_deployer_who_holds_supply_and_liquidity_is_a_rug_risk(self):
+        analysis = self.analyze({self.DEPLOYER: 400}, {self.DEPLOYER: 90})
+
+        found = {f.check: f for f in analysis.findings}
+        assert found["concentrated_supply"].severity == "high"
+        assert "40.00%" in found["concentrated_supply"].title
+        assert found["pullable_liquidity"].severity == "high"
+        assert analysis.liquidity.holdings[0].role == "Deployer and owner"
+
+    def test_burned_liquidity_is_reported_and_not_pullable(self):
+        dead = "0x000000000000000000000000000000000000dead"
+        analysis = self.analyze({self.DEPLOYER: 10}, {dead: 99})
+
+        found = {f.check for f in analysis.findings}
+        assert "burned_liquidity" in found
+        assert "pullable_liquidity" not in found
+        assert analysis.liquidity.pools[0].burned == 99
+
+    def test_liquidity_held_elsewhere_counts_as_others(self):
+        analysis = self.analyze({}, {"0x" + "44" * 20: 100})
+
+        assert analysis.liquidity.pools[0].others == 100
+
+
+MINTABLE_BODY = "function mint(uint256 a) public onlyOwner {}"
