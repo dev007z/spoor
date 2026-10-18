@@ -5,6 +5,9 @@ address, keeps those that move funds in the trace direction within the address's
 time bound and above the minimum amount, follows the largest `fan_out` of them,
 and adds the counterparties as the next frontier. An address is expanded once per
 run, so cycles terminate. Every stop and truncation is recorded on its node.
+
+An analyst can also expand one stopped address by hand: its stop is overridden for
+that address only, and the trace continues from it under the run's normal rules.
 """
 
 import logging
@@ -27,12 +30,16 @@ class TraceEngine:
         self.forward = run.direction == TraceDirection.FORWARD
         self.nodes = {}  # address_id -> TraceNode
 
-    def execute(self):
+    def execute(self, from_node=None):
+        """Run the whole trace, or continue it from one node an analyst chose to expand."""
         self.run.mark_running()
         try:
             if self.adapter is None:
                 self.adapter = get_adapter(self.run.chain)
-            self.trace()
+            if from_node is None:
+                self.trace()
+            else:
+                self.continue_from(from_node)
         except AdapterError as exc:
             self.run.mark_finished(error=str(exc))
         except Exception:
@@ -44,16 +51,23 @@ class TraceEngine:
 
     def trace(self):
         seed_anchor = self.run.start if self.forward else self.run.end
-        frontier = [self.add_node(seed, hop=0, anchor=seed_anchor) for seed in self.run.seeds.all()]
+        self.walk([self.add_node(seed, hop=0, anchor=seed_anchor) for seed in self.run.seeds.all()])
+
+    def continue_from(self, node):
+        self.nodes = {n.address_id: n for n in self.run.nodes.select_related("address", "label")}
+        self.walk(self.expand(self.nodes[node.address_id], forced=True))
+
+    def walk(self, frontier):
         while frontier:
             frontier = [child for node in frontier for child in self.expand(node)]
 
-    def expand(self, node):
+    def expand(self, node, forced=False):
         """Follow one address. Returns the newly discovered nodes."""
-        if node.label and node.label.category in TERMINAL_CATEGORIES:
-            return self.stop(node, StopReason.LABELED_ENDPOINT)
-        if node.hop >= self.run.max_hops:
-            return self.stop(node, StopReason.MAX_HOPS)
+        if not forced:
+            if node.label and node.label.category in TERMINAL_CATEGORIES:
+                return self.stop(node, StopReason.LABELED_ENDPOINT)
+            if node.hop >= self.run.max_hops:
+                return self.stop(node, StopReason.MAX_HOPS)
 
         start, end = self.window(node)
         selected = []
