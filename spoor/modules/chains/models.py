@@ -172,3 +172,32 @@ class Transfer(ModelMixin):
     @property
     def amount_units(self):
         return self.token.to_units(self.amount)
+
+    @classmethod
+    def store_records(cls, chain, token, records):
+        """Persist TransferRecords; a transfer already stored keeps its original evidence."""
+        values = {value for r in records for value in (r.from_address, r.to_address)}
+        Address.objects.bulk_create(
+            [Address(chain=chain, address=value) for value in values], ignore_conflicts=True
+        )
+        address_ids = dict(
+            Address.objects.filter(chain=chain, address__in=values).values_list("address", "id")
+        )
+        cls.objects.bulk_create(
+            [
+                cls(
+                    chain=chain,
+                    token=token,
+                    tx_hash=r.tx_hash,
+                    log_index=r.log_index,
+                    block_number=r.block_number,
+                    timestamp=r.timestamp,
+                    from_address_id=address_ids[r.from_address],
+                    to_address_id=address_ids[r.to_address],
+                    amount=r.amount,
+                    raw_response=r.raw_response,
+                )
+                for r in records
+            ],
+            ignore_conflicts=True,
+        )

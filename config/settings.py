@@ -61,6 +61,13 @@ CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
+SPOOR_CHAIN_ADAPTERS = {
+    "tron": {
+        "class": "spoor.modules.chains.adapters.tron.TronGridAdapter",
+        "options": {"api_key": os.getenv("TRONGRID_API_KEY", "")},
+    },
+}
+
 if env_bool("HTTPS"):
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -78,4 +85,9 @@ LOGGING = {
         "console": {"class": "logging.StreamHandler", "formatter": "standard"},
     },
     "root": {"handlers": ["console"], "level": os.getenv("LOG_LEVEL", "INFO")},
+    # httpx logs full request URLs at INFO, which would leak query-string API keys.
+    "loggers": {
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+    },
 }

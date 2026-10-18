@@ -203,3 +203,20 @@ class TestTransfer:
 
         with pytest.raises(IntegrityError):
             Transfer.objects.create(tx_hash=tx_hash, log_index=0, amount=1, **context)
+
+
+@pytest.mark.django_db
+class TestEvidenceIsReadOnlyInAdmin:
+    def test_even_a_superuser_cannot_edit_or_delete_stored_responses(self, admin_client):
+        response = RawResponse.record(
+            source="example", endpoint="https://x.test", params={}, status_code=200, body="{}"
+        )
+        change_url = f"/admin/chains/rawresponse/{response.pk}/change/"
+        delete_url = f"/admin/chains/rawresponse/{response.pk}/delete/"
+
+        assert admin_client.get(change_url).status_code == 200  # viewable
+        assert admin_client.post(change_url, {"body": "tampered"}).status_code == 403
+        assert admin_client.post(delete_url, {"post": "yes"}).status_code == 403
+
+        response.refresh_from_db()
+        assert response.body == "{}"
