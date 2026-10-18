@@ -5,6 +5,7 @@ from django.utils import timezone
 from spoor.common.mixins import ModelMixin
 from spoor.modules.cases.models import Case
 from spoor.modules.chains.models import Address, Token, Transfer
+from spoor.modules.labels.enums import LabelConfidence
 from spoor.modules.labels.models import Label
 from spoor.modules.tracing.enums import StopReason, TraceDirection, TraceStatus
 
@@ -80,7 +81,11 @@ class TraceRun(ModelMixin):
         return self.status in (TraceStatus.COMPLETED, TraceStatus.FAILED)
 
     def fetch_nodes(self):
-        return self.nodes.select_related("address", "label").order_by("hop", "created_at")
+        return (
+            self.nodes.select_related("address", "label")
+            .prefetch_related("signals")
+            .order_by("hop", "created_at")
+        )
 
     def fetch_edges(self):
         return self.edges.select_related(
@@ -149,3 +154,22 @@ class TraceEdge(ModelMixin):
 
     def __str__(self):
         return f"{self.transfer} (hop {self.hop})"
+
+
+class NodeSignal(ModelMixin):
+    """A heuristic's finding about a traced address. A signal, never an attribution."""
+
+    node = models.ForeignKey(TraceNode, on_delete=models.CASCADE, related_name="signals")
+    heuristic = models.CharField(max_length=50, help_text="Registered heuristic key.")
+    name = models.CharField(max_length=100)
+    confidence = models.CharField(max_length=10, choices=LabelConfidence.choices)
+    explanation = models.TextField()
+    transfers = models.ManyToManyField(Transfer, related_name="signals")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["node", "heuristic"], name="unique_signal_per_node"),
+        ]
+
+    def __str__(self):
+        return f"{self.heuristic} on {self.node}"

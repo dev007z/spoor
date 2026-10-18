@@ -42,6 +42,14 @@ def build_graph(run):
                 or ("Expanded" if node.expanded else "Queued"),
                 "fan_out_truncated": node.fan_out_truncated,
                 "fetch_incomplete": node.fetch_incomplete,
+                "signals": [
+                    {
+                        "name": signal.name,
+                        "confidence": signal.get_confidence_display(),
+                        "explanation": signal.explanation,
+                    }
+                    for signal in node.signals.all()
+                ],
                 "expandable": run.is_finished and not node.expanded,
                 "expand_url": reverse("tracing:expand_node", args=[run.pk, node.pk]),
                 "explorer_url": chain.address_url(address),
