@@ -1,0 +1,72 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format static %}
+
+{% block title %}Trace | Spoor{% endblock %}
+
+{% block content %}
+  <h1>{{ run.get_direction_display }}</h1>
+  <p class="params">
+    {% if run.case %}<span>Case <a href="{% url 'cases:case_detail' run.case.pk %}">{{ run.case.name }}</a></span>{% endif %}
+    <span><strong>{{ run.token.symbol }}</strong> on {{ run.chain.name }}</span>
+    {% if run.seed_tx_hash %}
+      <span>Seed transaction <a class="mono" href="{{ seed_tx_url }}" target="_blank" rel="noopener noreferrer" title="{{ run.seed_tx_hash }}">{{ run.seed_tx_hash|short }}</a></span>
+    {% else %}
+      <span>Seed {% for seed in seeds %}<strong class="mono" title="{{ seed.address }}">{{ seed.address|short }}</strong>{% endfor %}</span>
+    {% endif %}
+    <span>{{ run.start|date:"Y-m-d H:i" }} to {{ run.end|date:"Y-m-d H:i" }} UTC</span>
+    <span>Max <strong>{{ run.max_hops }}</strong> hops</span>
+    <span>Fan-out <strong>{{ run.fan_out }}</strong></span>
+    <span>Min <strong>{{ min_amount_units|amount }}</strong> {{ run.token.symbol }}</span>
+  </p>
+
+  <section class="graph-layout">
+    <div>
+      <div id="trace-graph" data-graph-url="{% url 'tracing:trace_graph' run.pk %}" role="img" aria-label="Fund-flow graph of the trace"></div>
+      <p class="legend">
+        <span style="--dot: var(--node-seed)">Seed</span>
+        <span style="--dot: var(--node-address)">Unlabeled</span>
+        <span style="--dot: var(--node-exchange)">Exchange</span>
+        <span style="--dot: var(--node-bridge)">Bridge</span>
+        <span style="--dot: var(--node-mixer)">Mixer</span>
+        <span style="--dot: var(--node-sanctioned)">Sanctioned</span>
+        <span style="--dot: var(--node-scam)">Scam</span>
+        <span class="note">Dashed outline: results truncated</span>
+        <span class="note">Double outline: heuristic signal</span>
+      </p>
+    </div>
+    <aside id="graph-panel" class="panel">
+      <p class="lede">Select an address or a flow to see its details.</p>
+    </aside>
+  </section>
+
+  {% include "tracing/_trace_body.html" %}
+
+  <section class="panel table-wrap">
+    <div class="section-head">
+      <h2>Reports</h2>
+      <button id="issue-report" class="primary" data-url="{% url 'reports:issue_report' run.pk %}" {% if not run.is_finished %}disabled title="Available when the trace finishes"{% endif %}>Issue report</button>
+    </div>
+    <table>
+      <thead><tr><th>Issued (UTC)</th><th>By</th><th>Report</th><th>Manifest SHA-256</th><th>PDF SHA-256</th></tr></thead>
+      <tbody>
+        {% for report in reports %}
+          <tr>
+            <td>{{ report.created_at|date:"Y-m-d H:i:s" }}</td>
+            <td>{{ report.created_by.get_username }}</td>
+            <td>
+              <a href="{% url 'reports:report_html' report.pk %}" target="_blank" rel="noopener">HTML</a>
+              {% if report.pdf_sha256 %} · <a href="{% url 'reports:report_pdf' report.pk %}">PDF</a>{% else %}<span class="lede" title="{{ report.pdf_error }}"> · no PDF</span>{% endif %}
+            </td>
+            <td class="mono" title="{{ report.manifest_sha256 }}">{{ report.manifest_sha256|short:8 }}</td>
+            <td class="mono" title="{{ report.pdf_sha256 }}">{% if report.pdf_sha256 %}{{ report.pdf_sha256|short:8 }}{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="empty">No reports issued yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <script src="{% static 'spoor/vendor/cytoscape.min.js' %}" defer></script>
+  <script src="{% static 'spoor/trace-graph.js' %}" defer></script>
+{% endblock %}

@@ -2,5 +2,9 @@
 
 {% block content %}
   <h1>Spoor</h1>
-  <p>Trace the money, and explain the contract that stole it.</p>
+  <p class="lede">Trace the money, and explain the contract that stole it.</p>
+
+  <section class="panel">
+    <p><a href="{% url 'chains:address_transfers' %}">Look up an address's transfers</a> and store them with the provider evidence behind each one.</p>
+  </section>
 {% endblock %}

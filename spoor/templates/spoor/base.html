@@ -1,14 +1,32 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Spoor{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'spoor/app.css' %}">
+  <script src="{% static 'spoor/vendor/htmx.min.js' %}" defer></script>
 </head>
-<body>
-  <header>
-    <strong>Spoor</strong>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+  <header class="topbar">
+    <a class="brand" href="{% url 'home' %}">Spoor</a>
     {% if user.is_authenticated %}
+      <nav>
+        {% url 'cases:case_list' as cases_url %}
+        {% url 'tracing:trace_list' as traces_url %}
+        {% url 'chains:address_transfers' as transfers_url %}
+        {% url 'labels:label_list' as labels_url %}
+        {% url 'screening:screen' as screening_url %}
+        {% url 'contracts:contract_list' as contracts_url %}
+        <a href="{{ cases_url }}" {% if request.path|slice:":7" == "/cases/" %}aria-current="page"{% endif %}>Cases</a>
+        <a href="{{ traces_url }}" {% if request.path|slice:":8" == "/traces/" %}aria-current="page"{% endif %}>Traces</a>
+        <a href="{{ transfers_url }}" {% if request.path == transfers_url %}aria-current="page"{% endif %}>Transfers</a>
+        <a href="{{ screening_url }}" {% if request.path == screening_url %}aria-current="page"{% endif %}>Screening</a>
+        <a href="{{ contracts_url }}" {% if request.path|slice:":11" == "/contracts/" %}aria-current="page"{% endif %}>Contracts</a>
+        <a href="{{ labels_url }}" {% if request.path == labels_url %}aria-current="page"{% endif %}>Labels</a>
+        {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+      </nav>
       <form method="post" action="{% url 'logout' %}">
         {% csrf_token %}
         <span>{{ user.get_username }}</span>

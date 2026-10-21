@@ -1,6 +1,6 @@
 [project]
 name = "spoor"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Open-source on-chain fund tracing and token contract analysis."
 readme = "README.md"
 license = "Apache-2.0"
@@ -8,11 +8,14 @@ license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "celery[redis]>=5.6.3",
+    "defusedxml>=0.7.1",
     "django>=6.1.2",
     "djangorestframework>=3.18.3",
     "gunicorn>=26.2.0",
+    "httpx>=0.28.1",
     "psycopg[binary]>=3.3.6",
     "python-dotenv>=1.2.4",
+    "weasyprint>=70.0",
     "whitenoise>=6.12.0",
 ]
 
@@ -40,6 +43,7 @@ select = ["E", "W", "F", "I", "B", "UP", "DJ", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests.py" = ["S101", "S106"]
+"**/test_*.py" = ["S101", "S106"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"

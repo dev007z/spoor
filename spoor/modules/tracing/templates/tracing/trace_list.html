@@ -1,0 +1,57 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format %}
+
+{% block title %}Traces | Spoor{% endblock %}
+
+{% block content %}
+  <h1>Traces</h1>
+  <p class="lede">Follow funds hop by hop from a seed address. Traces run in the background; every followed transfer is stored with its evidence.</p>
+
+  <form class="panel" method="post" action="{% url 'tracing:trace_list' %}">
+    {% csrf_token %}
+    <div class="form-grid wide">
+      {% for field in form %}
+        <div class="field{% if field.name == 'address' %} span-2{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="field">
+        <button type="submit" class="primary">Start trace</button>
+      </div>
+    </div>
+  </form>
+
+  <section class="panel table-wrap">
+    <h2>Recent traces</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Started</th><th>Token</th><th>Seed</th><th>Direction</th><th>Window (UTC)</th>
+          <th class="num">Addresses</th><th class="num">Transfers</th><th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+          <tr>
+            <td><a href="{% url 'tracing:trace_detail' run.pk %}">{{ run.created_at|date:"Y-m-d H:i" }}</a></td>
+            <td>{{ run.token.symbol }} on {{ run.token.chain.name }}</td>
+            <td class="mono">
+              {% if run.seed_tx_hash %}<span title="{{ run.seed_tx_hash }}">tx {{ run.seed_tx_hash|short }}</span>
+              {% else %}{% for seed in run.seeds.all %}<span title="{{ seed.address }}">{{ seed.address|short }}</span>{% endfor %}{% endif %}
+            </td>
+            <td>{{ run.direction|capfirst }}</td>
+            <td>{{ run.start|date:"Y-m-d H:i" }} to {{ run.end|date:"Y-m-d H:i" }}</td>
+            <td class="num">{{ run.node_count }}</td>
+            <td class="num">{{ run.edge_count }}</td>
+            <td><span class="badge {{ run.status }}">{{ run.get_status_display }}</span></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="8" class="empty">No traces yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endblock %}

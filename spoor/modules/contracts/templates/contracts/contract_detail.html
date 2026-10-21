@@ -1,0 +1,132 @@
+{% extends "spoor/base.html" %}
+{% load spoor_format %}
+
+{% block title %}{{ contract }} | Spoor{% endblock %}
+
+{% block content %}
+  <h1>{{ contract.name|default:"Unverified contract" }}</h1>
+  <p class="params">
+    <span>{{ contract.chain.name }}</span>
+    <a class="mono" href="{{ explorer_url }}" target="_blank" rel="noopener noreferrer">{{ contract.address.address }}</a>
+    {% if contract.compiler_version %}<span>{{ contract.compiler_version }}</span>{% endif %}
+    <span>Source fetched {{ contract.raw_response.retrieved_at|date:"Y-m-d H:i" }} UTC · <a href="{% url 'chains:evidence' contract.raw_response_id %}">evidence</a></span>
+  </p>
+
+  {% if not contract.is_verified %}
+    <div class="notice warn">Etherscan has no verified source for this contract, so its code cannot be checked. Unverified tokens are a risk signal in themselves.</div>
+  {% endif %}
+  {% if contract.is_proxy %}
+    <div class="notice warn">This is an upgradeable proxy: its behaviour comes from the implementation{% if implementation %} <a href="{% url 'contracts:contract_detail' implementation.pk %}">{{ implementation.name }}</a>{% endif %} (<span class="mono">{{ contract.implementation }}</span>), which the admin can replace.</div>
+  {% endif %}
+
+  {% if contract.is_verified or implementation %}
+    <section class="panel">
+      <h2>Findings</h2>
+      {% for finding in analysis.findings %}
+        <article class="finding {{ finding.severity }}">
+          <header><span class="badge sev-{{ finding.severity }}">{{ finding.severity|capfirst }}</span> <strong>{{ finding.title }}</strong></header>
+          <p>{{ finding.explanation }}</p>
+          {% if finding.evidence %}
+            <ul class="evidence">
+              {% for item in finding.evidence %}<li><span class="lede mono" title="{{ item.file }}">{{ item.file|tail_path }}:{{ item.line }}</span> <code>{{ item.code }}</code></li>{% endfor %}
+            </ul>
+          {% endif %}
+        </article>
+      {% empty %}
+        <p class="lede">No owner powers found by the static checks. That is not a safety guarantee: checks read code patterns and can miss unusual designs.</p>
+      {% endfor %}
+      {% if analysis.ownership and analysis.ownership.error %}
+        <p class="notice warn">Could not read owner() live: {{ analysis.ownership.error }}</p>
+      {% elif analysis.ownership %}
+        <p class="lede">owner() read live at {{ analysis.ownership.raw_response.retrieved_at|date:"Y-m-d H:i:s" }} UTC · <a href="{% url 'chains:evidence' analysis.ownership.raw_response.pk %}">evidence</a></p>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2>Deployer and owner</h2>
+    <dl class="facts">
+      <dt>Deployer</dt>
+      <dd>{% if contract.deployer %}<a class="mono" href="{{ contract.chain|address_url:contract.deployer }}" target="_blank" rel="noopener noreferrer">{{ contract.deployer }}</a>{% if contract.creation_tx %} · <a href="{{ contract.chain|tx_url:contract.creation_tx }}" target="_blank" rel="noopener noreferrer">creation tx</a>{% endif %}{% else %}<span class="lede">Unknown. {{ contract.deployer_note }}</span>{% endif %}</dd>
+      <dt>Owner</dt>
+      <dd>{% if analysis.ownership.owner %}<a class="mono" href="{{ contract.chain|address_url:analysis.ownership.owner }}" target="_blank" rel="noopener noreferrer">{{ analysis.ownership.owner }}</a>{% if analysis.ownership.renounced %} (renounced){% endif %}{% elif analysis.ownership.error %}<span class="lede">Could not read: {{ analysis.ownership.error }}</span>{% else %}<span class="lede">No owner() function</span>{% endif %}</dd>
+    </dl>
+  </section>
+
+  {% if analysis.liquidity %}
+    <section class="panel table-wrap">
+      <h2>Supply and liquidity ({{ analysis.liquidity.dex }})</h2>
+      {% if analysis.liquidity.error %}
+        <p class="notice warn">Could not read supply and liquidity: {{ analysis.liquidity.error }}</p>
+      {% else %}
+        <table>
+          <thead><tr><th>Holder</th><th>Address</th><th class="num">Share of supply</th></tr></thead>
+          <tbody>
+            {% for holding in analysis.liquidity.holdings %}
+              <tr><td>{{ holding.role }}</td><td class="mono" title="{{ holding.address }}">{{ holding.address|short }}</td><td class="num">{{ holding.share }}%</td></tr>
+            {% empty %}
+              <tr><td colspan="3" class="empty">No deployer or owner wallet known.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <table>
+          <thead><tr><th>Pool</th><th>Pair</th><th class="num">Burned</th><th class="num">Deployer / owner</th><th class="num">Held by others</th></tr></thead>
+          <tbody>
+            {% for pool in analysis.liquidity.pools %}
+              <tr>
+                <td>{{ contract.name }}/{{ pool.quote }}</td>
+                <td class="mono"><a href="{{ contract.chain|address_url:pool.pair }}" target="_blank" rel="noopener noreferrer">{{ pool.pair|short }}</a></td>
+                <td class="num">{{ pool.burned }}%</td>
+                <td class="num">{% for holding in pool.held %}{{ holding.share }}%{% if not forloop.last %} / {% endif %}{% empty %}n/a{% endfor %}</td>
+                <td class="num" title="Includes locker contracts, which are not identified">{{ pool.others }}%</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="empty">No pool with the main quote tokens.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </section>
+  {% endif %}
+
+  <form class="panel" method="post" action="{% url 'contracts:trace_deployer' contract.pk %}">
+    {% csrf_token %}
+    <h2>Trace the deployer</h2>
+    <p class="lede">Follow funds out of the deployer and owner wallets{% if controllers %} ({% for address, role in controllers.items %}{{ role|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}, plus any wallets you add.</p>
+    <div class="form-grid wide">
+      {% for field in trace_form %}
+        <div class="field{% if field.name == 'extra_wallets' %} span-2{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+      {% endfor %}
+      <div class="field"><button type="submit" class="primary">Start trace</button></div>
+    </div>
+  </form>
+
+  {% if functions %}
+    <section class="panel table-wrap">
+      <h2>Functions ({{ functions|length }})</h2>
+      <table>
+        <thead><tr><th>Function</th><th>Inputs</th><th>Kind</th></tr></thead>
+        <tbody>
+          {% for function in functions %}
+            <tr>
+              <td class="mono">{{ function.name }}</td>
+              <td class="mono wrap">{% for input in function.inputs %}{{ input.type }} {{ input.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+              <td>{% if function.stateMutability == "view" or function.stateMutability == "pure" %}Read{% else %}<strong>Changes state</strong>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% endif %}
+
+  {% for name, code in contract.source_files.items %}
+    <details class="panel source">
+      <summary class="mono">{{ name }}</summary>
+      <pre class="body">{{ code }}</pre>
+    </details>
+  {% endfor %}
+{% endblock %}
