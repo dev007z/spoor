@@ -53,6 +53,10 @@ class ChainAdapter(ABC):
     def get_token_transfers(self, address, token, start, end, max_records):
         """Token transfers into or out of `address` with start <= timestamp <= end.
 
+        `max_records` is a soft cap: an adapter may return slightly more so that it never
+        stops partway through a transaction or block, and reports complete=False whenever
+        transfers in the window were left out.
+
         Addresses in the records are canonical (see chains.addresses). `start` and
         `end` are timezone-aware datetimes.
         """

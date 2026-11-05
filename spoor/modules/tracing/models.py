@@ -40,6 +40,7 @@ class TraceRun(ModelMixin):
     fan_out = models.PositiveSmallIntegerField(
         default=5, help_text="Largest qualifying transfers followed per address."
     )
+    # A soft cap: adapters finish the block they are in, so an address can exceed it slightly.
     max_records_per_address = models.PositiveIntegerField(default=500)
 
     status = models.CharField(

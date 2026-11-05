@@ -100,12 +100,20 @@ class TestTronGridAdapterOnRecordedData:
         assert {t.raw_response_id for t in stored} == {r.raw_response.pk for r in result.records}
 
 
-def listing_page(tx_hashes, fingerprint=None):
+def listing_page(tx_hashes, fingerprint=None, timestamps=None):
+    """A TronGrid listing page. Each transfer gets its own block unless timestamps say otherwise."""
+    timestamps = timestamps or [1_792_270_800_000 + 3000 * i for i in range(len(tx_hashes))]
     return {
         "success": True,
         "data": [
-            {"transaction_id": tx, "type": "Transfer", "from": SYNTHETIC_ADDRESS, "value": "1"}
-            for tx in tx_hashes
+            {
+                "transaction_id": tx,
+                "type": "Transfer",
+                "from": SYNTHETIC_ADDRESS,
+                "value": "1",
+                "block_timestamp": timestamp,
+            }
+            for tx, timestamp in zip(tx_hashes, timestamps, strict=True)
         ],
         "meta": {"fingerprint": fingerprint} if fingerprint else {},
     }
@@ -186,6 +194,43 @@ class TestTronGridAdapterBehaviour:
 
         assert len(result.records) == 2
         assert not result.complete
+
+    def test_cap_never_splits_a_transaction(self, tron, usdt):
+        """Regression: max_records=1 with two transfers in one transaction used to fail the run."""
+        fake = FakeTronGrid(
+            pages={None: listing_page([self.TX_A, self.TX_A, self.TX_B], timestamps=[1, 1, 2])},
+            events={self.TX_A: events_page(self.TX_A, transfers=2)},
+        )
+
+        result = self.fetch(tron, usdt, fake, max_records=1)
+
+        assert [r.log_index for r in result.records] == [0, 1]
+        assert not result.complete
+
+    def test_cap_finishes_a_block_that_continues_on_the_next_page(self, tron, usdt):
+        fake = FakeTronGrid(
+            pages={
+                None: listing_page([self.TX_A, self.TX_B], fingerprint="page-2", timestamps=[1, 2]),
+                "page-2": listing_page([self.TX_B, self.TX_C], timestamps=[2, 3]),
+            },
+            events={self.TX_A: events_page(self.TX_A), self.TX_B: events_page(self.TX_B, 2)},
+        )
+
+        result = self.fetch(tron, usdt, fake, max_records=2)
+
+        assert [r.tx_hash for r in result.records] == [self.TX_A, self.TX_B, self.TX_B]
+        assert not result.complete
+
+    def test_cap_reached_at_the_last_listed_transfer_is_complete(self, tron, usdt):
+        fake = FakeTronGrid(
+            pages={None: listing_page([self.TX_A, self.TX_B])},
+            events={self.TX_A: events_page(self.TX_A), self.TX_B: events_page(self.TX_B)},
+        )
+
+        result = self.fetch(tron, usdt, fake, max_records=2)
+
+        assert len(result.records) == 2
+        assert result.complete
 
     def test_several_transfers_in_one_transaction_are_kept_apart(self, tron, usdt):
         fake = FakeTronGrid(

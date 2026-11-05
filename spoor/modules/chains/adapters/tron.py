@@ -64,7 +64,13 @@ class TronGridAdapter(ChainAdapter):
         return FetchResult(records=records, complete=complete)
 
     def list_transfer_transactions(self, address, token, start, end, max_records):
-        """Transaction ids with the number of listed transfers in each, oldest first."""
+        """Transaction ids with the number of listed transfers in each, oldest first.
+
+        Once max_records is reached the listing still finishes the block it is in, so a
+        transaction is never counted partly: all its transfers share the block's timestamp,
+        and the per-transaction cross-check against its events stays exact. The listing is
+        only ordered by timestamp, so stopping at the next transaction id would not be safe.
+        """
         url = f"{self.base_url}/v1/accounts/{address}/transactions/trc20"
         params = {
             "contract_address": token.contract,
@@ -78,16 +84,19 @@ class TronGridAdapter(ChainAdapter):
 
         counts = Counter()
         listed = 0
+        last_block = None  # the block being finished once max_records is reached
         while True:
             page, _ = self.client.get_json(url, params, cacheable=cacheable, check=check_success)
 
             for item in page["data"]:
                 if item.get("type") != "Transfer":
                     continue
-                if listed >= max_records:
+                if last_block is not None and item["block_timestamp"] != last_block:
                     return dict(counts), False
                 counts[self.chain.normalize_tx_hash(item["transaction_id"])] += 1
                 listed += 1
+                if listed >= max_records and last_block is None:
+                    last_block = item["block_timestamp"]
 
             cursor = page.get("meta", {}).get("fingerprint")
             if not cursor or not page["data"]:
